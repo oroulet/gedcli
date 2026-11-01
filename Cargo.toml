@@ -8,7 +8,7 @@ license = "GPL-3.0-or-later"
 readme = "README.md"
 keywords = ["gedcom", "genealogy", "family-tree", "cli"]
 categories = ["command-line-utilities"]
-exclude = [".gitattributes"]
+exclude = [".gitattributes", "comments.md"]
 
 [dependencies]
 anyhow = "1.0.104"
