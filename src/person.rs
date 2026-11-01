@@ -11,6 +11,8 @@ pub struct Brief {
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub life: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sex: Option<String>,
 }
 
 impl fmt::Display for Brief {
@@ -63,6 +65,7 @@ impl<'a> People<'a> {
                 id: xref.to_owned(),
                 name: "(missing record)".to_owned(),
                 life: None,
+                sex: None,
             },
         }
     }
@@ -141,6 +144,7 @@ pub fn brief_of(record: &Node) -> Brief {
         id: view.xref.clone(),
         name: view.display_name(),
         life: view.life_years(),
+        sex: record.value_of("SEX").filter(|s| !s.trim().is_empty()),
     }
 }
 

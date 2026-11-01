@@ -60,6 +60,15 @@ fn label(rel: &Rel, root: bool) -> String {
     format!("{mark}{relation}{}{suffix}", styled(&rel.person))
 }
 
+fn sex_style(sex: Option<&str>) -> console::Style {
+    let style = console::Style::new().bold();
+    match sex {
+        Some("M") => style.color256(39),
+        Some("F") => style.color256(213),
+        _ => style.white(),
+    }
+}
+
 fn styled(person: &Brief) -> String {
     let life = person
         .life
@@ -68,7 +77,7 @@ fn styled(person: &Brief) -> String {
         .unwrap_or_default();
     format!(
         "{}{} {}",
-        console::style(&person.name).bold(),
+        sex_style(person.sex.as_deref()).apply_to(&person.name),
         console::style(life).dim(),
         console::style(&person.id).dim()
     )
