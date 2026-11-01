@@ -1,4 +1,5 @@
 mod app;
+mod family;
 mod forms;
 mod screen;
 mod view;
@@ -28,7 +29,8 @@ fn event_loop(
         let size = terminal.size()?;
         let people = People::new(&store.doc);
         let screen = app.screen(&people);
-        app.visible = view::visible_rows(size.height, &screen);
+        let body = ratatui::layout::Rect::new(0, 0, size.width, size.height.saturating_sub(1));
+        app.visible = family::visible_rows(body, &app, &screen);
         terminal.draw(|frame| view::draw(frame, &app, &screen))?;
         drop(screen);
         drop(people);
@@ -130,7 +132,8 @@ pub fn render_to_text(store: &Store, app: &mut App, width: u16, height: u16) -> 
         ratatui::Terminal::new(TestBackend::new(width, height)).expect("test terminal");
     let people = People::new(&store.doc);
     let screen = app.screen(&people);
-    app.visible = view::visible_rows(height, &screen);
+    let body = ratatui::layout::Rect::new(0, 0, width, height.saturating_sub(1));
+    app.visible = family::visible_rows(body, app, &screen);
     terminal
         .draw(|frame| view::draw(frame, app, &screen))
         .expect("draw");

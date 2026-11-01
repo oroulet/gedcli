@@ -1,146 +1,35 @@
 use ratatui::Frame;
-use ratatui::layout::{Constraint, Flex, Layout, Rect};
+use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Clear, List, ListItem, ListState, Padding, Paragraph};
 use unicode_width::UnicodeWidthStr;
 
 use super::app::{App, Mode};
+use super::family;
 use super::forms::{ADD_FIELDS, AddForm, EditForm, SearchForm};
-use super::screen::{CENTER, CHILDREN, GRANDCHILDREN, GRANDPARENTS, PARENTS, ROWS, Screen};
+use super::screen::Screen;
 use crate::edit::FIELDS;
 use crate::person::Brief;
 
-const MAX_TEXT: u16 = 22;
 const MIN_TEXT: u16 = 8;
 const PADDING: u16 = 1;
 const GAP: u16 = 1;
-const MARRIAGE: &str = " ⚭ ";
-const BOX_HEIGHT: u16 = 6;
 const KEYS: &str = " ? help  ←↓↑→/hjkl move  ⏎ centre  b back  n partner  / find  e edit  c child  p parent  q quit ";
-
-pub fn visible_rows(height: u16, screen: &Screen) -> [bool; ROWS] {
-    let mut visible = [false, true, true, true, false];
-    let mut used = needed_height(visible, screen) + 1;
-    for row in [GRANDPARENTS, GRANDCHILDREN] {
-        let extra = row_height(&screen.rows[row]);
-        if used + extra <= height {
-            visible[row] = true;
-            used += extra;
-        }
-    }
-    visible
-}
-
-fn needed_height(visible: [bool; ROWS], screen: &Screen) -> u16 {
-    (0..ROWS)
-        .filter(|&row| visible[row])
-        .map(|row| {
-            if row == CENTER {
-                center_height(screen)
-            } else {
-                row_height(&screen.rows[row])
-            }
-        })
-        .sum()
-}
 
 pub fn draw(frame: &mut Frame, app: &App, screen: &Screen) {
     let area = frame.area();
     let [body, status] = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).areas(area);
-    let constraints = row_constraints(app.visible, screen);
-    let areas = Layout::vertical(constraints).flex(Flex::Center).split(body);
-    let mut next = 0;
-    for row in 0..ROWS {
-        if !app.visible[row] {
-            continue;
-        }
-        let area = areas[next];
-        next += 1;
-        if row == CENTER {
-            draw_center(frame, area, app, screen);
-        } else {
-            draw_row(frame, area, app, screen, row);
-        }
-    }
+    family::draw_family(frame, body, app, screen);
     draw_status(frame, status, app);
     draw_overlay(frame, app);
 }
 
-fn row_constraints(visible: [bool; ROWS], screen: &Screen) -> Vec<Constraint> {
-    (0..ROWS)
-        .filter(|&row| visible[row])
-        .map(|row| {
-            if row == CENTER {
-                Constraint::Length(center_height(screen))
-            } else {
-                Constraint::Length(row_height(&screen.rows[row]))
-            }
-        })
-        .collect()
-}
-
-fn row_title(row: usize, screen: &Screen) -> String {
-    match row {
-        GRANDPARENTS => " grandparents ".to_owned(),
-        PARENTS => " parents ".to_owned(),
-        CHILDREN => match screen.partner() {
-            Some(p) => format!(
-                " children with {} ",
-                p.person
-                    .as_ref()
-                    .map_or("unknown partner", |b| b.name.as_str())
-            ),
-            None => " children ".to_owned(),
-        },
-        GRANDCHILDREN => " grandchildren ".to_owned(),
-        _ => String::new(),
-    }
-}
-
-fn center_height(screen: &Screen) -> u16 {
-    let main = box_height(&main_lines(screen, u16::MAX));
-    let partner = screen.rows[CENTER]
-        .get(1)
-        .map_or(0, |p| box_height(&person_lines(p, MAX_TEXT)));
-    main.max(partner).max(BOX_HEIGHT) + 2
-}
-
-fn row_height(people: &[Brief]) -> u16 {
-    let tallest = people
-        .iter()
-        .map(|p| box_height(&person_lines(p, MAX_TEXT)))
-        .max()
-        .unwrap_or(1);
-    tallest + 2
-}
-
-fn draw_row(frame: &mut Frame, area: Rect, app: &App, screen: &Screen, row: usize) {
-    let people = &screen.rows[row];
-    let block = Block::bordered()
-        .border_type(BorderType::Plain)
-        .border_style(dim());
-    let inner = block.inner(area);
-    if people.is_empty() {
-        frame.render_widget(block.title(row_title(row, screen)), area);
-        frame.render_widget(Paragraph::new(Span::styled(" none recorded", dim())), inner);
-        return;
-    }
-    let focus = (app.focus.0 == row).then_some(app.focus.1);
-    let boxes: Vec<Vec<Line>> = people.iter().map(|p| person_lines(p, MAX_TEXT)).collect();
-    let (start, end) = visible_window(&boxes, inner.width, focus);
-    let mut title = row_title(row, screen);
-    if start > 0 || end < people.len() {
-        title.push_str(&format!("{}–{} of {} ", start + 1, end, people.len()));
-    }
-    frame.render_widget(block.title(title), area);
-    let rects = layout_boxes(&boxes[start..end], inner);
-    for (offset, (lines, rect)) in boxes[start..end].iter().zip(rects).enumerate() {
-        draw_box(frame, rect, lines.clone(), focus == Some(start + offset));
-    }
-}
-
-fn visible_window(boxes: &[Vec<Line>], width: u16, focus: Option<usize>) -> (usize, usize) {
+pub(super) fn visible_window(
+    boxes: &[Vec<Line>],
+    width: u16,
+    focus: Option<usize>,
+) -> (usize, usize) {
     let fits_from = |start: usize| {
         let mut used = 0;
         let mut end = start;
@@ -161,36 +50,16 @@ fn visible_window(boxes: &[Vec<Line>], width: u16, focus: Option<usize>) -> (usi
     (start, fits_from(start))
 }
 
-fn layout_boxes(boxes: &[Vec<Line>], area: Rect) -> Vec<Rect> {
-    let widths: Vec<u16> = boxes.iter().map(|b| box_width(b)).collect();
-    let total = widths.iter().sum::<u16>() + GAP * widths.len().saturating_sub(1) as u16;
-    let mut x = area.x + area.width.saturating_sub(total) / 2;
-    widths
-        .iter()
-        .zip(boxes)
-        .map(|(&width, lines)| {
-            let rect = Rect {
-                x,
-                y: area.y,
-                width: width.min(area.right().saturating_sub(x)),
-                height: box_height(lines).min(area.height),
-            };
-            x += width + GAP;
-            rect
-        })
-        .collect()
-}
-
-fn box_width(lines: &[Line]) -> u16 {
+pub(super) fn box_width(lines: &[Line]) -> u16 {
     let text = lines.iter().map(Line::width).max().unwrap_or(0) as u16;
     text.max(MIN_TEXT) + 2 + 2 * PADDING
 }
 
-fn box_height(lines: &[Line]) -> u16 {
+pub(super) fn box_height(lines: &[Line]) -> u16 {
     lines.len() as u16 + 2
 }
 
-fn draw_box(frame: &mut Frame, area: Rect, lines: Vec<Line<'static>>, focused: bool) {
+pub(super) fn draw_box(frame: &mut Frame, area: Rect, lines: Vec<Line<'static>>, focused: bool) {
     let block = person_block(focused);
     let inner = block.inner(area);
     frame.render_widget(block, area);
@@ -210,7 +79,7 @@ fn person_block(focused: bool) -> Block<'static> {
     }
 }
 
-fn person_lines(person: &Brief, width: u16) -> Vec<Line<'static>> {
+pub(super) fn person_lines(person: &Brief, width: u16) -> Vec<Line<'static>> {
     let style = sex_style(person.sex.as_deref());
     let mut lines: Vec<Line> = name_lines(&person.name, width)
         .into_iter()
@@ -228,63 +97,7 @@ fn person_lines(person: &Brief, width: u16) -> Vec<Line<'static>> {
     lines
 }
 
-fn draw_center(frame: &mut Frame, area: Rect, app: &App, screen: &Screen) {
-    let title = match screen.partners.len() {
-        0 | 1 => " person ".to_owned(),
-        n => format!(
-            " person · partner {}/{n} (n for next) ",
-            screen.partner_index + 1
-        ),
-    };
-    let block = Block::bordered().title(title).border_style(dim());
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-    let partner = screen.rows[CENTER]
-        .get(1)
-        .map(|p| person_lines(p, MAX_TEXT));
-    let partner_space = partner
-        .as_ref()
-        .map_or(0, |p| box_width(p) + MARRIAGE.width() as u16);
-    let main_text = inner.width.saturating_sub(partner_space + 2 + 2 * PADDING);
-    let main = main_lines(screen, main_text);
-    let mut boxes = vec![main];
-    boxes.extend(partner.clone());
-    let rects = center_rects(&boxes, inner);
-    draw_box(frame, rects[0], boxes[0].clone(), app.focus == (CENTER, 0));
-    if let (Some(lines), Some(&rect)) = (partner, rects.get(1)) {
-        let mark = Rect {
-            x: rect.x - MARRIAGE.width() as u16,
-            y: rect.y + 1,
-            width: MARRIAGE.width() as u16,
-            height: 1,
-        };
-        frame.render_widget(Paragraph::new(MARRIAGE).style(dim()), mark);
-        draw_box(frame, rect, lines, app.focus == (CENTER, 1));
-    }
-}
-
-fn center_rects(boxes: &[Vec<Line>], area: Rect) -> Vec<Rect> {
-    let widths: Vec<u16> = boxes.iter().map(|b| box_width(b)).collect();
-    let marks = MARRIAGE.width() as u16 * widths.len().saturating_sub(1) as u16;
-    let total = widths.iter().sum::<u16>() + marks;
-    let mut x = area.x + area.width.saturating_sub(total) / 2;
-    widths
-        .iter()
-        .zip(boxes)
-        .map(|(&width, lines)| {
-            let rect = Rect {
-                x,
-                y: area.y,
-                width: width.min(area.right().saturating_sub(x)),
-                height: box_height(lines).min(area.height),
-            };
-            x += width + MARRIAGE.width() as u16;
-            rect
-        })
-        .collect()
-}
-
-fn main_lines(screen: &Screen, width: u16) -> Vec<Line<'static>> {
+pub(super) fn main_lines(screen: &Screen, width: u16) -> Vec<Line<'static>> {
     let person = screen.center();
     let mut lines = person_lines(person, width);
     for line in lines.iter_mut().take(1) {
@@ -526,7 +339,7 @@ fn sex_style(sex: Option<&str>) -> Style {
     }
 }
 
-fn dim() -> Style {
+pub(super) fn dim() -> Style {
     Style::new().fg(Color::DarkGray)
 }
 

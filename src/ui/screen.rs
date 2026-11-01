@@ -13,8 +13,15 @@ pub struct Partner {
     pub person: Option<Brief>,
 }
 
+/// People in row `r` (`upper`) and their children in row `r + 1` (`lower`), by index.
+pub struct Group {
+    pub upper: Vec<usize>,
+    pub lower: Vec<usize>,
+}
+
 pub struct Screen {
     pub rows: [Vec<Brief>; ROWS],
+    pub links: [Vec<Group>; ROWS - 1],
     pub details: Vec<String>,
     pub partners: Vec<Partner>,
     pub partner_index: usize,
@@ -36,16 +43,26 @@ impl Screen {
             partner_index % partners.len()
         };
         let children = current_children(people, center, partner_index);
+        let parents = people.parents(center);
         let mut center_row = vec![people.brief(center)];
         center_row.extend(partners.get(partner_index).and_then(|p| p.person.clone()));
+        let (grandparents, grandparent_links) = grandparents(people, &parents);
+        let (grandchildren, grandchild_links) = grandchildren(people, &children);
+        let links = [
+            grandparent_links,
+            one_group(parents.len(), 1),
+            one_group(center_row.len(), children.len()),
+            grandchild_links,
+        ];
         Self {
             rows: [
-                grandparents(people, center),
-                briefs(people, &people.parents(center)),
+                grandparents,
+                briefs(people, &parents),
                 center_row,
                 briefs(people, &children),
-                grandchildren(people, &children),
+                grandchildren,
             ],
+            links,
             details: details(people, center),
             partners,
             partner_index,
@@ -78,27 +95,54 @@ fn current_children(people: &People, center: &str, partner_index: usize) -> Vec<
         .unwrap_or_default()
 }
 
-fn grandparents(people: &People, center: &str) -> Vec<Brief> {
-    people
-        .parents(center)
-        .iter()
-        .flat_map(|parent| people.parents(parent))
-        .map(|id| people.brief(&id))
-        .collect()
+fn one_group(upper: usize, lower: usize) -> Vec<Group> {
+    if upper == 0 || lower == 0 {
+        return Vec::new();
+    }
+    vec![Group {
+        upper: (0..upper).collect(),
+        lower: (0..lower).collect(),
+    }]
 }
 
-fn grandchildren(people: &People, children: &[String]) -> Vec<Brief> {
+fn grandparents(people: &People, parents: &[String]) -> (Vec<Brief>, Vec<Group>) {
+    let mut row = Vec::new();
+    let mut links = Vec::new();
+    for (index, parent) in parents.iter().enumerate() {
+        let theirs = people.parents(parent);
+        let upper = (row.len()..row.len() + theirs.len()).collect();
+        row.extend(theirs.iter().map(|id| people.brief(id)));
+        if !theirs.is_empty() {
+            links.push(Group {
+                upper,
+                lower: vec![index],
+            });
+        }
+    }
+    (row, links)
+}
+
+fn grandchildren(people: &People, children: &[String]) -> (Vec<Brief>, Vec<Group>) {
     let mut ids: Vec<String> = Vec::new();
-    for child in children {
+    let mut links = Vec::new();
+    for (index, child) in children.iter().enumerate() {
         let mut theirs = people.graph.children_of(child).to_vec();
         theirs.sort_by_key(|c| people.birth_key(c));
+        let mut lower = Vec::new();
         for id in theirs {
             if !ids.iter().any(|known| known.eq_ignore_ascii_case(&id)) {
+                lower.push(ids.len());
                 ids.push(id);
             }
         }
+        if !lower.is_empty() {
+            links.push(Group {
+                upper: vec![index],
+                lower,
+            });
+        }
     }
-    briefs(people, &ids)
+    (briefs(people, &ids), links)
 }
 
 fn details(people: &People, center: &str) -> Vec<String> {

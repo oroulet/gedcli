@@ -151,7 +151,7 @@ fn preview_real_file() {
         .split('x')
         .map(|n| n.parse().unwrap())
         .collect();
-    app.focus = (super::screen::CHILDREN, 1);
+    app.focus = (super::screen::CENTER, 0);
     println!("{}", render_to_text(&store, &mut app, size[0], size[1]));
 }
 
@@ -195,4 +195,48 @@ fn ctrl_c_quits_from_any_mode() {
         app.key(ctrl_c, &people);
         assert!(app.quit, "Ctrl-C did not quit after {opener:?}");
     }
+}
+
+#[test]
+fn grandchildren_hang_under_their_own_parent() {
+    let (_dir, mut store) = fixture_store();
+    let add = |store: &mut Store, anchor: &str, family: Option<&str>, given: &str| {
+        let request = AddRequest {
+            anchor: anchor.to_owned(),
+            relation: crate::add::Relation::Child,
+            family: family.map(str::to_owned),
+            given: given.to_owned(),
+            surname: "Lund".to_owned(),
+            birth: "1960".to_owned(),
+            death: String::new(),
+        };
+        apply(store, Effect::Add(request)).unwrap();
+    };
+    add(&mut store, "@I1@", Some("@F1@"), "Liv");
+    add(&mut store, "@IG1@", None, "Nils");
+    let mut app = App::new("@I1@".to_owned());
+    let people = People::new(&store.doc);
+    let screen = app.screen(&people);
+    let area = ratatui::layout::Rect::new(0, 0, 120, 44);
+    app.visible = family::visible_rows(area, &app, &screen);
+    let names = |row: usize, items: &[usize]| -> Vec<String> {
+        items
+            .iter()
+            .map(|&i| screen.rows[row][i].name.clone())
+            .collect()
+    };
+    let links: Vec<(Vec<String>, Vec<String>)> = family::drawn_links(area, &app, &screen)
+        .into_iter()
+        .filter(|(upper, _, _, _)| *upper == screen::CHILDREN)
+        .map(|(upper, lower, ups, downs)| (names(upper, &ups), names(lower, &downs)))
+        .collect();
+    let owned = |a: &[&str]| a.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();
+    assert!(
+        links.contains(&(owned(&["Kari Lund"]), owned(&["Ola Berg"]))),
+        "{links:?}"
+    );
+    assert!(
+        links.contains(&(owned(&["Liv Lund"]), owned(&["Nils Lund"]))),
+        "{links:?}"
+    );
 }
