@@ -2,6 +2,7 @@ mod card;
 mod chart;
 mod count;
 mod edit;
+mod kinship;
 mod migrate;
 mod person;
 mod relatives;
@@ -79,6 +80,15 @@ enum Command {
         #[arg(long, short)]
         yes: bool,
     },
+    /// How two people are related, e.g. relation "kari lund" ola
+    Relation {
+        /// First person: name words in quotes, or an xref
+        from: String,
+        /// Second person: name words in quotes, or an xref
+        to: String,
+        #[arg(long, value_enum)]
+        format: Option<Format>,
+    },
     /// Overview of the file: format, counts, connections, data quality
     Summary {
         /// Output format: tree or list print text, json prints JSON
@@ -149,6 +159,7 @@ fn run(cli: Cli) -> Result<()> {
             assignments,
             yes,
         } => edit(&mut store, &target, &assignments, yes),
+        Command::Relation { from, to, format } => relation(&store, &from, &to, format),
         Command::Summary { format } => print_summary(&store, format),
         Command::Submitters {
             query,
@@ -202,6 +213,32 @@ fn print_submitters(
             (false, false, Some(Format::List)) => print!("{}", submitters::list_entries(entries)),
             _ => print!("{}", submitters::render_entries(entries)),
         }
+    }
+    Ok(())
+}
+
+fn relation(store: &Store, from: &str, to: &str, format: Option<Format>) -> Result<()> {
+    let format = format.unwrap_or(if std::io::stdout().is_terminal() {
+        Format::Tree
+    } else {
+        Format::List
+    });
+    let people = People::new(&store.doc);
+    let interactive = on_terminal() && format.is_visual();
+    let pick = |query: &str| {
+        let target = Target {
+            query: vec![query.to_owned()],
+            pick: None,
+        };
+        find(&people, &target, interactive, format == Format::Json)
+            .with_context(|| format!("for {query:?}"))
+    };
+    let (a, b) = (pick(from)?, pick(to)?);
+    let kinship = kinship::relate(&people, &a.id, &b.id);
+    match format {
+        Format::Json => println!("{}", serde_json::to_string_pretty(&kinship)?),
+        Format::List => print!("{}", kinship::list(&kinship)),
+        _ => print!("{}", kinship::render(&kinship)),
     }
     Ok(())
 }

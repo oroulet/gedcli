@@ -23,6 +23,7 @@ real changes. gedcli also keeps the file's BOM and CRLF line endings.
     gedcli show ase --children 3 --format chart   # top-down chart (ancestors: root at the bottom)
     gedcli edit kari                       # interactive: pick field, type value, confirm
     gedcli edit kari --set birth.place=Bergen --set "birth.date=ABT 1950" --yes
+    gedcli relation "kari lund" ola      # Ola is Kari's son, with common ancestors and path
     gedcli summary [--format json]            # format, counts, submitters, connections, data quality
     gedcli submitters                         # people entered per submitter account
     gedcli submitters "kari lund" [--count]       # the people one submitter entered

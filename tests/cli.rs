@@ -168,3 +168,15 @@ fn submitters_count_unlinked_people_for_exporter() {
         "1\tOther\t@S2@\n"
     );
 }
+
+#[test]
+fn relation_names_grandmother_and_in_law() {
+    let (_dir, file) = workspace();
+    let out = stdout(gedcli(&file).args(["relation", "ola", "åse", "--format", "tree"]));
+    assert_eq!(
+        out,
+        "Åse Lund is Ola Berg's grandmother.\n  path              Ola Berg → mother Kari Lund → mother Åse Lund\n"
+    );
+    let out = stdout(gedcli(&file).args(["relation", "per", "åse", "--format", "list"]));
+    assert!(out.starts_with("relation\twife\n"));
+}
