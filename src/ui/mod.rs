@@ -26,11 +26,12 @@ fn event_loop(
 ) -> Result<()> {
     while !app.quit {
         let size = terminal.size()?;
-        app.visible = view::visible_rows(size.height);
-        terminal.draw(|frame| {
-            let people = People::new(&store.doc);
-            view::draw(frame, &app, &app.screen(&people));
-        })?;
+        let people = People::new(&store.doc);
+        let screen = app.screen(&people);
+        app.visible = view::visible_rows(size.height, &screen);
+        terminal.draw(|frame| view::draw(frame, &app, &screen))?;
+        drop(screen);
+        drop(people);
         let Event::Key(key) = event::read()? else {
             continue;
         };
@@ -127,12 +128,11 @@ pub fn render_to_text(store: &Store, app: &mut App, width: u16, height: u16) -> 
     use ratatui::backend::TestBackend;
     let mut terminal =
         ratatui::Terminal::new(TestBackend::new(width, height)).expect("test terminal");
-    app.visible = view::visible_rows(height);
+    let people = People::new(&store.doc);
+    let screen = app.screen(&people);
+    app.visible = view::visible_rows(height, &screen);
     terminal
-        .draw(|frame| {
-            let people = People::new(&store.doc);
-            view::draw(frame, app, &app.screen(&people));
-        })
+        .draw(|frame| view::draw(frame, app, &screen))
         .expect("draw");
     let buffer = terminal.backend().buffer().clone();
     (0..height)

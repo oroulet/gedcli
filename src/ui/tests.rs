@@ -33,13 +33,28 @@ fn shows_parents_person_and_children() {
         "parents",
         "Per Lund",
         "Åse Lund",
-        "Kari Lund  @I3@",
+        "Kari Lund",
         "Birth      1950",
         "children",
         "Ola Berg",
     ] {
         assert!(text.contains(expected), "missing {expected:?} in\n{text}");
     }
+}
+
+#[test]
+fn selected_box_is_thick_and_tight() {
+    let (_dir, store) = fixture_store();
+    let mut app = App::new("@I3@".to_owned());
+    let text = render_to_text(&store, &mut app, 100, 30);
+    let top = text.lines().find(|l| l.contains('┏')).expect("a thick box");
+    let width = top
+        .chars()
+        .skip_while(|&c| c != '┏')
+        .take_while(|&c| c != '┓')
+        .count()
+        + 1;
+    assert!(width < 40, "selected box is {width} wide:\n{text}");
 }
 
 #[test]
@@ -131,7 +146,13 @@ fn preview_real_file() {
     let store = Store::open(path.into()).unwrap();
     let start = std::env::var("GEDCLI_PREVIEW_ID").unwrap();
     let mut app = App::new(start);
-    println!("{}", render_to_text(&store, &mut app, 120, 45));
+    let size: Vec<u16> = std::env::var("GEDCLI_PREVIEW_SIZE")
+        .unwrap_or_else(|_| "120x45".to_owned())
+        .split('x')
+        .map(|n| n.parse().unwrap())
+        .collect();
+    app.focus = (super::screen::CHILDREN, 1);
+    println!("{}", render_to_text(&store, &mut app, size[0], size[1]));
 }
 
 #[test]
