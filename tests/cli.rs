@@ -317,3 +317,25 @@ fn edit_keeps_bare_cr_line_endings() {
     assert!(!after.contains('\n'));
     assert!(after.starts_with(&text[..text.find("0 @I4@").unwrap()]));
 }
+
+const STEP_FAMILY: &str = "0 HEAD\n1 GEDC\n2 VERS 7.0\n\
+0 @I1@ INDI\n1 NAME Per /Lund/\n1 SEX M\n1 FAMS @F1@\n1 FAMS @F2@\n\
+0 @I2@ INDI\n1 NAME Kari /Berg/\n1 SEX F\n1 FAMS @F1@\n1 FAMC @F9@\n\
+0 @I3@ INDI\n1 NAME Åse /Strand/\n1 SEX F\n1 FAMS @F2@\n1 FAMS @F3@\n\
+0 @I4@ INDI\n1 NAME Nils /Berg/\n1 SEX M\n1 FAMS @F3@\n1 FAMC @F9@\n\
+0 @I5@ INDI\n1 NAME Liv /Berg/\n1 SEX F\n1 FAMC @F3@\n\
+0 @I6@ INDI\n1 NAME Ola /Berg/\n1 SEX M\n1 FAMS @F9@\n\
+0 @F1@ FAM\n1 HUSB @I1@\n1 WIFE @I2@\n\
+0 @F2@ FAM\n1 HUSB @I1@\n1 WIFE @I3@\n\
+0 @F3@ FAM\n1 HUSB @I4@\n1 WIFE @I3@\n1 CHIL @I5@\n\
+0 @F9@ FAM\n1 HUSB @I6@\n1 CHIL @I2@\n1 CHIL @I4@\n0 TRLR\n";
+
+#[test]
+fn relation_through_marriage_takes_the_closest_partner() {
+    let (_dir, file) = workspace();
+    fs::write(&file, STEP_FAMILY).unwrap();
+    for _ in 0..5 {
+        let out = stdout(gedcli(&file).args(["relation", "per", "liv", "--format", "list"]));
+        assert!(out.starts_with("relation\tstepdaughter\n"), "{out}");
+    }
+}

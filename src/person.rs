@@ -90,7 +90,7 @@ impl<'a> People<'a> {
 
     pub fn parents(&self, xref: &str) -> Vec<String> {
         let mut parents = self.graph.parents_of(xref).to_vec();
-        parents.sort_by_key(|p| sex_rank(self.sex(p).as_deref()));
+        parents.sort_by_cached_key(|p| (sex_rank(self.sex(p).as_deref()), p.to_ascii_uppercase()));
         parents
     }
 

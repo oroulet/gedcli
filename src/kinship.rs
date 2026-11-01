@@ -45,8 +45,9 @@ pub fn relate(people: &People, a: &str, b: &str) -> Kinship {
 }
 
 type Path = Vec<(String, String)>;
+type Described = (String, Vec<String>, Path);
 
-fn describe(people: &People, a: &str, b: &str) -> (String, Vec<String>, Path) {
+fn describe(people: &People, a: &str, b: &str) -> Described {
     if a.eq_ignore_ascii_case(b) {
         return (
             "same person".to_owned(),
@@ -224,41 +225,61 @@ fn partner_word(people: &People, xref: &str) -> &'static str {
     }
 }
 
-fn through_partner(people: &People, a: &str, b: &str) -> Option<(String, Vec<String>, Path)> {
-    for partner in people.graph.partners_of(a) {
-        if let Some(blood) = blood(people, partner, b) {
-            let name = in_law_of_partner(
-                &blood_name(people, partner, b, &blood),
-                partner_word(people, partner),
-            );
-            let mut path = vec![(String::new(), a.to_owned())];
-            path.extend(
-                blood_path(people, partner, b, &blood)
-                    .into_iter()
-                    .enumerate()
-                    .map(|(i, (r, x))| {
-                        if i == 0 {
-                            (partner_word(people, partner).to_owned(), x)
-                        } else {
-                            (r, x)
-                        }
-                    }),
-            );
-            return Some((name, Vec::new(), path));
+fn through_partner(people: &People, a: &str, b: &str) -> Option<Described> {
+    let mut found: Vec<(u32, Described)> = Vec::new();
+    for partner in sorted(people.graph.partners_of(a)) {
+        if let Some(blood) = blood(people, &partner, b) {
+            let described = partners_relative(people, a, &partner, b, &blood);
+            found.push((blood.up + blood.down, described));
         }
     }
-    for partner in people.graph.partners_of(b) {
-        if let Some(blood) = blood(people, a, partner) {
-            let name = partner_of_relative(
-                &blood_name(people, a, partner, &blood),
-                partner_word(people, b),
-            );
-            let mut path = blood_path(people, a, partner, &blood);
-            path.push((partner_word(people, b).to_owned(), b.to_owned()));
-            return Some((name, Vec::new(), path));
+    for partner in sorted(people.graph.partners_of(b)) {
+        if let Some(blood) = blood(people, a, &partner) {
+            let described = relatives_partner(people, a, &partner, b, &blood);
+            found.push((blood.up + blood.down, described));
         }
     }
-    None
+    found
+        .into_iter()
+        .min_by_key(|(distance, _)| *distance)
+        .map(|(_, described)| described)
+}
+
+fn partners_relative(people: &People, a: &str, partner: &str, b: &str, blood: &Blood) -> Described {
+    let name = in_law_of_partner(
+        &blood_name(people, partner, b, blood),
+        partner_word(people, partner),
+    );
+    let mut path = vec![(String::new(), a.to_owned())];
+    path.extend(
+        blood_path(people, partner, b, blood)
+            .into_iter()
+            .enumerate()
+            .map(|(i, (r, x))| {
+                if i == 0 {
+                    (partner_word(people, partner).to_owned(), x)
+                } else {
+                    (r, x)
+                }
+            }),
+    );
+    (name, Vec::new(), path)
+}
+
+fn relatives_partner(people: &People, a: &str, partner: &str, b: &str, blood: &Blood) -> Described {
+    let name = partner_of_relative(
+        &blood_name(people, a, partner, blood),
+        partner_word(people, b),
+    );
+    let mut path = blood_path(people, a, partner, blood);
+    path.push((partner_word(people, b).to_owned(), b.to_owned()));
+    (name, Vec::new(), path)
+}
+
+fn sorted(xrefs: &[String]) -> Vec<String> {
+    let mut xrefs = xrefs.to_vec();
+    xrefs.sort_by_key(|x| x.to_ascii_uppercase());
+    xrefs
 }
 
 fn in_law_of_partner(relation: &str, partner: &str) -> String {
@@ -312,11 +333,11 @@ fn neighbours(people: &People, xref: &str) -> Vec<(String, String)> {
     for p in people.parents(xref) {
         out.push((parent_word(people.sex(&p).as_deref()).to_owned(), p));
     }
-    for c in people.graph.children_of(xref) {
-        out.push((child_word(people.sex(c).as_deref()).to_owned(), c.clone()));
+    for c in sorted(people.graph.children_of(xref)) {
+        out.push((child_word(people.sex(&c).as_deref()).to_owned(), c));
     }
-    for p in people.graph.partners_of(xref) {
-        out.push((partner_word(people, p).to_owned(), p.clone()));
+    for p in sorted(people.graph.partners_of(xref)) {
+        out.push((partner_word(people, &p).to_owned(), p));
     }
     out
 }
