@@ -17,6 +17,7 @@ real changes. gedcli also keeps the file's BOM and CRLF line endings.
 ## Commands
 
     gedcli show kari lund                     # person card (picker if several match)
+    gedcli show lund --all                    # every match, one after the other, no picker
     gedcli show lund --children               # descendants, 10 generations, as a tree
     gedcli show ola --parents 3               # ancestors, 3 generations
     gedcli show ola --parents --format list|json|tree|chart

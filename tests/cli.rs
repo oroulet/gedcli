@@ -384,3 +384,26 @@ fn edit_writes_through_a_symlink_and_keeps_permissions() {
         0o640
     );
 }
+
+#[test]
+fn show_all_prints_every_match() {
+    let (_dir, file) = workspace();
+    let out = stdout(gedcli(&file).args([
+        "show",
+        "lund",
+        "--all",
+        "--format",
+        "list",
+        "--parents",
+        "1",
+    ]));
+    assert_eq!(out.matches("# gen\t").count(), 3);
+    assert!(out.starts_with("# Åse Lund\t@I1@\n"));
+    let json = stdout(gedcli(&file).args(["show", "lund", "--all", "--format", "json"]));
+    let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+    assert_eq!(value.as_array().unwrap().len(), 3);
+    gedcli(&file)
+        .args(["show", "lund", "--all", "--pick", "1"])
+        .assert()
+        .failure();
+}

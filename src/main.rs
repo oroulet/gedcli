@@ -64,6 +64,9 @@ enum Command {
         /// Show ancestors, this many generations up
         #[arg(long, group = "relatives", value_name = "GENERATIONS", num_args = 0..=1, default_missing_value = DEFAULT_GENERATIONS)]
         parents: Option<u32>,
+        /// Show every match, one after the other, instead of asking
+        #[arg(long, conflicts_with = "pick")]
+        all: bool,
         /// Show xrefs in tree output (list and json always include them)
         #[arg(long)]
         ids: bool,
@@ -207,6 +210,7 @@ fn run(cli: Cli) -> Result<()> {
             children,
             parents,
             count,
+            all,
             ids,
             format,
         } => show(
@@ -216,6 +220,7 @@ fn run(cli: Cli) -> Result<()> {
                 children,
                 parents,
                 count,
+                all,
                 ids,
             },
             format,
@@ -555,7 +560,13 @@ struct Relatives {
     children: Option<u32>,
     parents: Option<u32>,
     count: bool,
+    all: bool,
     ids: bool,
+}
+
+enum Shown {
+    Text(String),
+    Json(serde_json::Value),
 }
 
 fn show(store: &Store, target: &Target, wanted: Relatives, format: Option<Format>) -> Result<()> {
@@ -565,25 +576,73 @@ fn show(store: &Store, target: &Target, wanted: Relatives, format: Option<Format
         Format::List
     });
     let people = People::new(&store.doc);
-    let interactive = on_terminal() && format.is_visual();
-    let person = find(&people, target, interactive, format == Format::Json)?;
+    let persons = if wanted.all {
+        let found = search::find(&people, &target.query.join(" "));
+        if found.is_empty() {
+            bail!("nobody matches");
+        }
+        found
+    } else {
+        let interactive = on_terminal() && format.is_visual();
+        vec![find(&people, target, interactive, format == Format::Json)?]
+    };
+    let shown = persons
+        .iter()
+        .map(|person| show_one(&people, person, &wanted, format))
+        .collect::<Result<Vec<_>>>()?;
+    print_shown(&persons, shown, wanted.all, format)
+}
+
+fn print_shown(persons: &[Brief], shown: Vec<Shown>, all: bool, format: Format) -> Result<()> {
+    let mut texts = Vec::new();
+    let mut values = Vec::new();
+    for (person, item) in persons.iter().zip(shown) {
+        match item {
+            Shown::Json(value) => values.push(value),
+            Shown::Text(text) if all => texts.push(format!("{}\n{text}", heading(person, format))),
+            Shown::Text(text) => texts.push(text),
+        }
+    }
+    if format == Format::Json {
+        let value = if all {
+            serde_json::Value::Array(values)
+        } else {
+            values.remove(0)
+        };
+        println!("{}", serde_json::to_string_pretty(&value)?);
+        return Ok(());
+    }
+    let text = texts.join("\n");
+    warn_if_too_wide(&text, format);
+    print!("{text}");
+    Ok(())
+}
+
+fn heading(person: &Brief, format: Format) -> String {
+    match format {
+        Format::List => format!("# {}\t{}", person.name, person.id),
+        _ => format!("══ {person} ══"),
+    }
+}
+
+fn show_one(people: &People, person: &Brief, wanted: &Relatives, format: Format) -> Result<Shown> {
     if wanted.children.is_none() && wanted.parents.is_none() {
-        return show_card(&people, &person, format);
+        return show_card(people, person, format);
     }
     if wanted.count {
-        return show_counts(&people, &person, &wanted, format);
+        return show_counts(people, person, wanted, format);
     }
     let ancestors = wanted
         .parents
-        .map(|n| relatives::ancestors(&people, &person.id, n));
+        .map(|n| relatives::ancestors(people, &person.id, n));
     let descendants = wanted
         .children
-        .map(|n| relatives::descendants(&people, &person.id, n));
+        .map(|n| relatives::descendants(people, &person.id, n));
     let sections: Vec<String> = match format {
         Format::Json => {
-            let value =
-                json!({ "person": person, "ancestors": ancestors, "descendants": descendants });
-            vec![format!("{}\n", serde_json::to_string_pretty(&value)?)]
+            return Ok(Shown::Json(
+                json!({ "person": person, "ancestors": ancestors, "descendants": descendants }),
+            ));
         }
         Format::Chart => {
             let up = ancestors.as_ref().map(chart::ancestors);
@@ -601,13 +660,15 @@ fn show(store: &Store, target: &Target, wanted: Relatives, format: Option<Format
             .map(render::list)
             .collect(),
     };
-    let text = sections.join("\n");
-    warn_if_too_wide(&text, format);
-    print!("{text}");
-    Ok(())
+    Ok(Shown::Text(sections.join("\n")))
 }
 
-fn show_counts(people: &People, person: &Brief, wanted: &Relatives, format: Format) -> Result<()> {
+fn show_counts(
+    people: &People,
+    person: &Brief,
+    wanted: &Relatives,
+    format: Format,
+) -> Result<Shown> {
     let tables: Vec<count::Counts> = [
         wanted.parents.map(|n| (n, count::Direction::Ancestors)),
         wanted.children.map(|n| (n, count::Direction::Descendants)),
@@ -616,19 +677,17 @@ fn show_counts(people: &People, person: &Brief, wanted: &Relatives, format: Form
     .flatten()
     .map(|(n, direction)| count::count(people, &person.id, n, direction))
     .collect();
-    match format {
-        Format::Json => println!("{}", serde_json::to_string_pretty(&tables)?),
-        Format::List => print!("{}", tables.iter().map(count::list).collect::<String>()),
-        _ => print!(
-            "{}",
+    Ok(match format {
+        Format::Json => Shown::Json(serde_json::to_value(&tables)?),
+        Format::List => Shown::Text(tables.iter().map(count::list).collect()),
+        _ => Shown::Text(
             tables
                 .iter()
                 .map(count::render)
                 .collect::<Vec<_>>()
-                .join("\n")
+                .join("\n"),
         ),
-    }
-    Ok(())
+    })
 }
 
 fn warn_if_too_wide(text: &str, format: Format) {
@@ -650,14 +709,13 @@ fn warn_if_too_wide(text: &str, format: Format) {
     }
 }
 
-fn show_card(people: &People, person: &Brief, format: Format) -> Result<()> {
+fn show_card(people: &People, person: &Brief, format: Format) -> Result<Shown> {
     let record = people.record(&person.id).context("record vanished")?;
     let card = card::build(people, record);
-    match format {
-        Format::Json => println!("{}", serde_json::to_string_pretty(&card)?),
-        _ => print!("{}", card::render(&card)),
-    }
-    Ok(())
+    Ok(match format {
+        Format::Json => Shown::Json(serde_json::to_value(&card)?),
+        _ => Shown::Text(card::render(&card)),
+    })
 }
 
 fn edit(store: &mut Store, target: &Target, assignments: &[String], yes: bool) -> Result<()> {
