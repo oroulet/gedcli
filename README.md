@@ -7,7 +7,8 @@ real changes. gedcli also keeps the file's BOM and CRLF line endings.
 
 ## Install
 
-    cargo install --path .
+    cargo install gedcli          # from crates.io
+    cargo install --path .        # from a checkout
 
 ## File
 
@@ -15,24 +16,24 @@ real changes. gedcli also keeps the file's BOM and CRLF line endings.
 
 ## Commands
 
-    gedcli show kari lund                # person card (picker if several match)
-    gedcli show lund --children          # descendants, 10 generations, as a tree
-    gedcli show ola --parents 3           # ancestors, 3 generations
+    gedcli show kari lund                     # person card (picker if several match)
+    gedcli show lund --children               # descendants, 10 generations, as a tree
+    gedcli show ola --parents 3               # ancestors, 3 generations
     gedcli show ola --parents --format list|json|tree|chart
-    gedcli show ola --parents --count     # ancestors per generation: found / possible / % complete
+    gedcli show ola --parents --count         # ancestors per generation: found / possible / % complete
     gedcli show ase --children 3 --format chart   # top-down chart (ancestors: root at the bottom)
-    gedcli edit kari                       # interactive: pick field, type value, confirm
+    gedcli edit kari                          # interactive: pick field, type value, confirm
     gedcli edit kari --set birth.place=Bergen --set "birth.date=ABT 1950" --yes
-    gedcli relation "kari lund" ola      # Ola is Kari's son, with common ancestors and path
+    gedcli relation "kari lund" ola           # Ola is Kari's son, with common ancestors and path
     gedcli check [--only KIND] [--all]        # data problems, each with the edit command that fixes it
     gedcli check --fix                        # rename country spellings (Norge, Nrwy. → Norway)
-    gedcli html ola --parents 6 --children 3 -o tree.html   # interactive tree in the browser
     gedcli compare ~/Downloads/new-export.ged # what a newer export adds, removes or changes
+    gedcli html ola --parents 6 --children 3 -o tree.html   # interactive tree in the browser
     gedcli summary [--format json]            # format, counts, submitters, connections, data quality
     gedcli submitters                         # people entered per submitter account
-    gedcli submitters "kari lund" [--count]       # the people one submitter entered
+    gedcli submitters "kari lund" [--count]   # the people one submitter entered
     gedcli add "kari lund" daughter Liv Berg "12 JUN 1980"
-    gedcli add per son Nils - 1955 --with "ase lund"   # pick the family
+    gedcli add per son Nils - 1955 --with "ase lund"   # pick the family when there are several
     gedcli migrate [--dry-run]                # convert the file in place to GEDCOM 7.0
     gedcli export --to 5.5.1 -o out.ged       # converted copy, e.g. for Geni
 
@@ -58,6 +59,16 @@ An empty value removes the field. Dates are checked and written in the
 file version's grammar (`about 12 june 1950` becomes `ABT 12 JUN 1950`). Each
 edit updates the record's `CHAN` timestamp (UTC). Removing the last detail of a
 death or burial keeps `DEAT Y` / `BURI Y`, so the fact itself stays.
+
+## Geni-specific behaviour
+
+gedcli works with any GEDCOM file. A few features assume a Geni export, where
+that's what makes them useful:
+
+- `migrate` turns `RFN geni:ID` into `EXID ID` + `TYPE https://www.geni.com/`.
+- `submitters` and the person card treat people without a `SUBM` link as
+  entered by the file's exporter (`HEAD.SUBM`), because Geni leaves that link
+  out for the exporting account's own profiles.
 
 ## Migration to 7.0
 
@@ -91,3 +102,8 @@ or sister. Use `-` for no surname or to skip the birth date.
 - A parent slot that is already taken is refused.
 - A relative with the same first name triggers a warning.
 - New records get local ids (`@IG1@`, `@FG1@`), so they never clash with Geni's.
+
+## License
+
+GPL-3.0-or-later, as required by the [gedcomkit](https://crates.io/crates/gedcomkit)
+dependency. See [LICENSE](LICENSE).

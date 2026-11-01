@@ -2,6 +2,13 @@
 name = "gedcli"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.88"
+description = "Browse, check and edit a GEDCOM family tree from the command line: person cards, ancestor/descendant trees, relationships, data checks, HTML export"
+license = "GPL-3.0-or-later"
+readme = "README.md"
+keywords = ["gedcom", "genealogy", "family-tree", "cli"]
+categories = ["command-line-utilities"]
+exclude = [".gitattributes"]
 
 [dependencies]
 anyhow = "1.0.104"
