@@ -1,3 +1,4 @@
+mod add;
 mod card;
 mod chart;
 mod check;
@@ -69,6 +70,27 @@ enum Command {
         /// Output format [default: tree on a terminal, list otherwise]
         #[arg(long, value_enum)]
         format: Option<Format>,
+    },
+    /// Add a relative, e.g. add "kari lund" daughter Liv Berg 1980
+    Add {
+        /// The existing person: name words in quotes, or an xref
+        anchor: String,
+        #[arg(value_enum)]
+        relation: add::Relation,
+        /// First name(s); quote several
+        given: String,
+        /// Surname; "-" for none
+        surname: String,
+        /// Birth date, e.g. 2012, "12 JUN 2012", "about 1900"
+        birth: Option<String>,
+        /// Death date
+        death: Option<String>,
+        /// For a child: the other parent, to choose the family when there are several
+        #[arg(long = "with", value_name = "PARTNER")]
+        with_partner: Option<String>,
+        /// Write without asking for confirmation
+        #[arg(long, short)]
+        yes: bool,
     },
     /// Edit a person's common fields, interactively or with --set
     #[command(after_help = format!("Fields: {}", edit::field_keys()))]
@@ -193,6 +215,32 @@ fn run(cli: Cli) -> Result<()> {
             },
             format,
         ),
+        Command::Add {
+            anchor,
+            relation,
+            given,
+            surname,
+            birth,
+            death,
+            with_partner,
+            yes,
+        } => {
+            let person = add::new_person(
+                &given,
+                &surname,
+                birth.as_deref(),
+                death.as_deref(),
+                store.is_v7(),
+            )?;
+            add_relative(
+                &mut store,
+                &anchor,
+                relation,
+                &person,
+                with_partner.as_deref(),
+                yes,
+            )
+        }
         Command::Edit {
             target,
             assignments,
@@ -394,6 +442,95 @@ fn print_compare(store: &Store, other: PathBuf, format: Option<Format>) -> Resul
         _ => print!("{}", compare::render(&comparison)),
     }
     Ok(())
+}
+
+fn add_relative(
+    store: &mut Store,
+    anchor: &str,
+    relation: add::Relation,
+    person: &add::NewPerson,
+    with_partner: Option<&str>,
+    yes: bool,
+) -> Result<()> {
+    let interactive = on_terminal();
+    let plan = {
+        let people = People::new(&store.doc);
+        let pick = |query: &str| {
+            let target = Target {
+                query: vec![query.to_owned()],
+                pick: None,
+            };
+            find(&people, &target, interactive, false).with_context(|| format!("for {query:?}"))
+        };
+        let anchor = pick(anchor)?;
+        let family = match with_partner {
+            Some(partner) => Some(family_with(&people, &anchor, &pick(partner)?)?),
+            None => choose_family(&people, &anchor, interactive)?,
+        };
+        add::plan(&people, &anchor, relation, person, family)?
+    };
+    for line in &plan.lines {
+        println!("{line}");
+    }
+    for warning in &plan.warnings {
+        println!("warning: {warning}");
+    }
+    if !yes && !confirm(interactive)? {
+        println!("not written");
+        return Ok(());
+    }
+    let xref = add::apply(&mut store.doc, &plan, person)?;
+    store.save()?;
+    println!("added {xref}, wrote {}", store.path.display());
+    Ok(())
+}
+
+fn family_with(people: &People, anchor: &Brief, partner: &Brief) -> Result<String> {
+    people
+        .unions(&anchor.id)
+        .into_iter()
+        .find(|u| {
+            u.partner
+                .as_deref()
+                .is_some_and(|p| p.eq_ignore_ascii_case(&partner.id))
+        })
+        .map(|u| u.family)
+        .with_context(|| {
+            format!(
+                "{} and {} have no family together; add the partner first",
+                anchor.name, partner.name
+            )
+        })
+}
+
+fn choose_family(people: &People, anchor: &Brief, interactive: bool) -> Result<Option<String>> {
+    let unions = people.unions(&anchor.id);
+    if unions.len() <= 1 {
+        return Ok(unions.into_iter().next().map(|u| u.family));
+    }
+    let labels: Vec<String> = unions
+        .iter()
+        .map(|u| {
+            let partner = u.partner.as_deref().map_or_else(
+                || "unknown partner".to_owned(),
+                |p| people.brief(p).to_string(),
+            );
+            format!("with {partner} ({} children)", u.children.len())
+        })
+        .collect();
+    if !interactive {
+        bail!(
+            "{} has several families; pass --with one of: {}",
+            anchor.name,
+            labels.join("; ")
+        );
+    }
+    let index = dialoguer::Select::new()
+        .with_prompt("Which family")
+        .items(&labels)
+        .default(0)
+        .interact()?;
+    Ok(Some(unions[index].family.clone()))
 }
 
 fn on_terminal() -> bool {

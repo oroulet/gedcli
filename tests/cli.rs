@@ -245,3 +245,42 @@ fn compare_reports_new_and_changed_people() {
     assert!(out.contains("added\t@I3@\tKari Lund\tbirth: 1951"));
     assert!(out.contains("added\t@I3@\tKari Lund\tchild: Nils Berg @I5@"));
 }
+
+#[test]
+fn add_child_links_both_sides() {
+    let (_dir, file) = workspace();
+    let out = stdout(gedcli(&file).args([
+        "add",
+        "kari",
+        "daughter",
+        "Liv",
+        "Berg",
+        "about 1980",
+        "--yes",
+    ]));
+    assert!(out.contains("add Liv Berg as daughter of Kari Lund in family @F2@"));
+    assert!(out.contains("added @IG1@"));
+    let text = fs::read_to_string(&file).unwrap();
+    assert!(text.contains("0 @IG1@ INDI\r\n1 NAME Liv /Berg/\r\n2 GIVN Liv\r\n2 SURN Berg\r\n1 SEX F\r\n1 BIRT\r\n2 DATE ABT 1980\r\n1 FAMC @F2@\r\n"));
+    assert!(text.contains("1 CHIL @I4@\r\n1 CHIL @IG1@\r\n"));
+    let tree = stdout(gedcli(&file).args(["show", "kari", "--children", "--format", "list"]));
+    assert!(tree.contains("1\tdaughter\tLiv Berg\tb. 1980\t@IG1@"));
+}
+
+#[test]
+fn add_parent_creates_family_and_refuses_second_father() {
+    let (_dir, file) = workspace();
+    gedcli(&file)
+        .args(["add", "per", "father", "Jon", "Lund", "1890", "--yes"])
+        .assert()
+        .success();
+    let out = stdout(gedcli(&file).args(["relation", "per", "jon", "--format", "list"]));
+    assert!(out.starts_with("relation\tfather\n"));
+    gedcli(&file)
+        .args(["add", "per", "father", "Other", "Lund", "--yes"])
+        .assert()
+        .failure();
+    let check =
+        stdout(gedcli(&file).args(["check", "--only", "one-sided-link", "--format", "list"]));
+    assert_eq!(check, "# kind\tid\tname\tdetail\tfix\n");
+}

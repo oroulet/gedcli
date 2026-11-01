@@ -225,7 +225,7 @@ fn normalize(field: Field, raw: &str, v7: bool) -> Result<Option<String>> {
     Ok(Some(value.to_owned()))
 }
 
-fn normalize_date(value: &str, v7: bool) -> Result<String> {
+pub(crate) fn normalize_date(value: &str, v7: bool) -> Result<String> {
     let date = GedcomDate::parse(value);
     let written = if !date.is_parsed() {
         None
@@ -411,7 +411,7 @@ fn after_names(record: &Node) -> usize {
         .map_or(0, |i| i + 1)
 }
 
-fn before_tail(record: &Node) -> usize {
+pub(crate) fn before_tail(record: &Node) -> usize {
     record
         .children
         .iter()

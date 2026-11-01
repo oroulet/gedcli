@@ -31,6 +31,8 @@ real changes. gedcli also keeps the file's BOM and CRLF line endings.
     gedcli summary [--format json]            # format, counts, submitters, connections, data quality
     gedcli submitters                         # people entered per submitter account
     gedcli submitters "kari lund" [--count]       # the people one submitter entered
+    gedcli add "kari lund" daughter Liv Berg "12 JUN 1980"
+    gedcli add per son Nils - 1955 --with "ase lund"   # pick the family
     gedcli migrate [--dry-run]                # convert the file in place to GEDCOM 7.0
     gedcli export --to 5.5.1 -o out.ged       # converted copy, e.g. for Geni
 
@@ -77,3 +79,15 @@ people plus the people with no submitter, and lists the two groups separately.
 On a terminal, `tree` colours names by sex (blue male, pink female, white unknown) and dims dates and ids. `chart` wraps
 names to 18 columns and warns when it is wider than the terminal (pipe it to
 `less -S`, or ask for fewer generations). Piped output never has colours.
+
+## Adding people
+
+`gedcli add ANCHOR RELATION GIVEN SURNAME [BIRTH] [DEATH]`. RELATION is one of
+son, daughter, child, father, mother, parent, husband, wife, partner, brother
+or sister. Use `-` for no surname or to skip the birth date.
+
+- Every link is written on both sides (`FAMC`/`CHIL`, `FAMS`/`HUSB`/`WIFE`).
+- A family is created when none exists.
+- A parent slot that is already taken is refused.
+- A relative with the same first name triggers a warning.
+- New records get local ids (`@IG1@`, `@FG1@`), so they never clash with Geni's.
