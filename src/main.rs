@@ -64,6 +64,9 @@ enum Command {
         /// Show ancestors, this many generations up
         #[arg(long, group = "relatives", value_name = "GENERATIONS", num_args = 0..=1, default_missing_value = DEFAULT_GENERATIONS)]
         parents: Option<u32>,
+        /// Show xrefs in tree output (list and json always include them)
+        #[arg(long)]
+        ids: bool,
         /// Count relatives per generation instead of listing them
         #[arg(long, requires = "relatives")]
         count: bool,
@@ -204,6 +207,7 @@ fn run(cli: Cli) -> Result<()> {
             children,
             parents,
             count,
+            ids,
             format,
         } => show(
             &store,
@@ -212,6 +216,7 @@ fn run(cli: Cli) -> Result<()> {
                 children,
                 parents,
                 count,
+                ids,
             },
             format,
         ),
@@ -550,6 +555,7 @@ struct Relatives {
     children: Option<u32>,
     parents: Option<u32>,
     count: bool,
+    ids: bool,
 }
 
 fn show(store: &Store, target: &Target, wanted: Relatives, format: Option<Format>) -> Result<()> {
@@ -587,7 +593,7 @@ fn show(store: &Store, target: &Target, wanted: Relatives, format: Option<Format
         Format::Tree => [ancestors, descendants]
             .iter()
             .flatten()
-            .map(render::tree)
+            .map(|rel| render::tree(rel, wanted.ids))
             .collect(),
         Format::List => [ancestors, descendants]
             .iter()

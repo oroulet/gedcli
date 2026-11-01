@@ -20,17 +20,17 @@ impl Format {
     }
 }
 
-pub fn tree(rel: &Rel) -> String {
-    to_tree(rel, true).to_string()
+pub fn tree(rel: &Rel, ids: bool) -> String {
+    to_tree(rel, true, ids).to_string()
 }
 
-fn to_tree(rel: &Rel, root: bool) -> Tree<String> {
-    let mut node = Tree::new(label(rel, root));
+fn to_tree(rel: &Rel, root: bool, ids: bool) -> Tree<String> {
+    let mut node = Tree::new(label(rel, root, ids));
     for parent in &rel.parents {
-        node.push(to_tree(parent, false));
+        node.push(to_tree(parent, false, ids));
     }
     for family in &rel.families {
-        let children = family.children.iter().map(|c| to_tree(c, false));
+        let children = family.children.iter().map(|c| to_tree(c, false, ids));
         match &family.partner {
             None if rel.families.len() == 1 => {
                 node.leaves.extend(children);
@@ -38,7 +38,7 @@ fn to_tree(rel: &Rel, root: bool) -> Tree<String> {
             partner => {
                 let name = partner
                     .as_ref()
-                    .map_or_else(|| "unknown partner".to_owned(), styled);
+                    .map_or_else(|| "unknown partner".to_owned(), |p| styled(p, ids));
                 node.push(Tree::new(format!("⚭ {name}")).with_leaves(children));
             }
         }
@@ -46,7 +46,7 @@ fn to_tree(rel: &Rel, root: bool) -> Tree<String> {
     node
 }
 
-fn label(rel: &Rel, root: bool) -> String {
+fn label(rel: &Rel, root: bool, ids: bool) -> String {
     let relation = if !root && is_parent(&rel.relation) {
         format!("{}: ", rel.relation)
     } else {
@@ -57,7 +57,7 @@ fn label(rel: &Rel, root: bool) -> String {
     } else {
         ("", "")
     };
-    format!("{mark}{relation}{}{suffix}", styled(&rel.person))
+    format!("{mark}{relation}{}{suffix}", styled(&rel.person, ids))
 }
 
 fn sex_style(sex: Option<&str>) -> console::Style {
@@ -69,17 +69,22 @@ fn sex_style(sex: Option<&str>) -> console::Style {
     }
 }
 
-fn styled(person: &Brief) -> String {
+fn styled(person: &Brief, ids: bool) -> String {
     let life = person
         .life
         .as_ref()
         .map(|l| format!(" ({l})"))
         .unwrap_or_default();
+    let id = if ids {
+        format!(" {}", person.id)
+    } else {
+        String::new()
+    };
     format!(
-        "{}{} {}",
+        "{}{}{}",
         sex_style(person.sex.as_deref()).apply_to(&person.name),
         console::style(life).dim(),
-        console::style(&person.id).dim()
+        console::style(id).dim()
     )
 }
 

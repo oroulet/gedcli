@@ -87,7 +87,7 @@ people plus the people with no submitter, and lists the two groups separately.
 
 ## Readability
 
-On a terminal, `tree` colours names by sex (blue male, pink female, white unknown) and dims dates and ids. `chart` wraps
+On a terminal, `tree` colours names by sex (blue male, pink female, white unknown) and dims dates. It leaves out xrefs unless you pass `--ids`; `list` and `json` always include them. `chart` wraps
 names to 18 columns and warns when it is wider than the terminal (pipe it to
 `less -S`, or ask for fewer generations). Piped output never has colours.
 

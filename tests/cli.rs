@@ -61,6 +61,9 @@ fn descendants_as_list() {
 fn generations_limit_depth() {
     let (_dir, file) = workspace();
     let out = stdout(gedcli(&file).args(["show", "ola", "--parents", "1", "--format", "tree"]));
+    assert_eq!(out, "Ola Berg\n└── mother: Kari Lund (b. 1950)\n");
+    let out =
+        stdout(gedcli(&file).args(["show", "ola", "--parents", "1", "--format", "tree", "--ids"]));
     assert_eq!(out, "Ola Berg @I4@\n└── mother: Kari Lund (b. 1950) @I3@\n");
 }
 
