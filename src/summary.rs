@@ -9,6 +9,7 @@ use serde::Serialize;
 use crate::person::{Brief, People};
 use crate::search::normalize;
 use crate::store::Store;
+use crate::submitters::{self, Tally};
 
 const TOP: usize = 10;
 
@@ -17,6 +18,7 @@ pub struct Summary {
     file: FileInfo,
     records: BTreeMap<String, usize>,
     people: PeopleInfo,
+    submitters: Tally,
     connections: Connections,
     quality: Quality,
 }
@@ -30,6 +32,7 @@ struct FileInfo {
     line_endings: String,
     producer: Option<String>,
     exported: Option<String>,
+    exported_by: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -79,6 +82,7 @@ pub fn build(store: &Store) -> Summary {
         file: file_info(store),
         records: record_counts(store),
         people: people_info(&people, &views),
+        submitters: submitters::tally(&store.doc),
         connections: connections(&people, &ids),
         quality: quality(store, &people, &views),
     }
@@ -94,6 +98,7 @@ fn file_info(store: &Store) -> FileInfo {
         line_endings: store.line_endings().to_owned(),
         producer: head.and_then(|h| h.value_of("SOUR")),
         exported: head.and_then(|h| h.value_of("DATE")),
+        exported_by: submitters::exporter(&store.doc).map(|x| submitters::name_of(&store.doc, &x)),
     }
 }
 
@@ -324,7 +329,12 @@ pub fn render(s: &Summary) -> String {
             .as_deref()
             .map(|d| format!(", exported {d}"))
             .unwrap_or_default();
-        let _ = writeln!(out, "Producer      {producer}{date}");
+        let by = f
+            .exported_by
+            .as_deref()
+            .map(|n| format!(" by {n}"))
+            .unwrap_or_default();
+        let _ = writeln!(out, "Producer      {producer}{date}{by}");
     }
     let records: Vec<String> = s
         .records
@@ -351,6 +361,25 @@ pub fn render(s: &Summary) -> String {
     }
     let _ = writeln!(out, "  surnames    {}", counted(&p.surnames));
     let _ = writeln!(out, "  countries   {}", counted(&p.countries));
+
+    let t = &s.submitters;
+    let top: Vec<String> = t
+        .contributors
+        .iter()
+        .take(5)
+        .map(|c| format!("{} ({})", c.name, c.people))
+        .collect();
+    let _ = writeln!(
+        out,
+        "\nSubmitters    {} accounts; top: {}",
+        t.contributors.len(),
+        top.join(", ")
+    );
+    let _ = writeln!(
+        out,
+        "  unlinked    {} people with no submitter (the exporter's own profiles); see `gedcli submitters`",
+        t.unlinked_people
+    );
 
     let c = &s.connections;
     let _ = writeln!(out, "\nConnections");

@@ -124,3 +124,47 @@ fn summary_counts_people_and_connections() {
     let value: serde_json::Value = serde_json::from_str(&json).unwrap();
     assert_eq!(value["people"]["total"], 4);
 }
+
+#[test]
+fn count_ancestors_per_generation() {
+    let (_dir, file) = workspace();
+    let out =
+        stdout(gedcli(&file).args(["show", "ola", "--parents", "--count", "--format", "list"]));
+    assert_eq!(
+        out,
+        "# gen\tname\tfound\tpossible\n1\tparents\t1\t2\n2\tgrandparents\t2\t4\ntotal\tancestors\t3\t\n"
+    );
+}
+
+#[test]
+fn ancestor_chart_has_root_at_bottom() {
+    let (_dir, file) = workspace();
+    let out = stdout(gedcli(&file).args(["show", "ola", "--parents", "--format", "chart"]));
+    assert_eq!(
+        out,
+        "          Åse Lund\nPer Lund  b. 1920\n    └────┬────┘\n         │\n     Kari Lund\n      b. 1950\n         │\n         │\n     Ola Berg\n"
+    );
+}
+
+#[test]
+fn submitters_count_unlinked_people_for_exporter() {
+    let (_dir, file) = workspace();
+    let text = fs::read_to_string(&file).unwrap();
+    let text = text
+        .replacen("1 CHAR UTF-8\r\n", "1 CHAR UTF-8\r\n1 SUBM @S1@\r\n", 1)
+        .replacen("1 RFN geni:111\r\n", "1 RFN geni:111\r\n1 SUBM @S2@\r\n", 1)
+        .replacen(
+            "0 TRLR",
+            "0 @S1@ SUBM\r\n1 NAME Me\r\n0 @S2@ SUBM\r\n1 NAME Other\r\n0 TRLR",
+            1,
+        );
+    fs::write(&file, text).unwrap();
+    assert_eq!(
+        stdout(gedcli(&file).args(["submitters", "me", "--count"])),
+        "3\tMe\t@S1@\n"
+    );
+    assert_eq!(
+        stdout(gedcli(&file).args(["submitters", "other", "--count"])),
+        "1\tOther\t@S2@\n"
+    );
+}

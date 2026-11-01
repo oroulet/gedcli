@@ -242,6 +242,7 @@ dependencies = [
  "anyhow",
  "assert_cmd",
  "clap",
+ "console",
  "deunicode",
  "dialoguer",
  "gedcomkit",

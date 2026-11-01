@@ -1,4 +1,6 @@
 mod card;
+mod chart;
+mod count;
 mod edit;
 mod migrate;
 mod person;
@@ -7,6 +9,7 @@ mod render;
 mod search;
 mod select;
 mod store;
+mod submitters;
 mod summary;
 
 use std::io::IsTerminal;
@@ -52,11 +55,14 @@ enum Command {
         #[command(flatten)]
         target: Target,
         /// Show descendants, this many generations deep
-        #[arg(long, value_name = "GENERATIONS", num_args = 0..=1, default_missing_value = DEFAULT_GENERATIONS)]
+        #[arg(long, group = "relatives", value_name = "GENERATIONS", num_args = 0..=1, default_missing_value = DEFAULT_GENERATIONS)]
         children: Option<u32>,
         /// Show ancestors, this many generations up
-        #[arg(long, value_name = "GENERATIONS", num_args = 0..=1, default_missing_value = DEFAULT_GENERATIONS)]
+        #[arg(long, group = "relatives", value_name = "GENERATIONS", num_args = 0..=1, default_missing_value = DEFAULT_GENERATIONS)]
         parents: Option<u32>,
+        /// Count relatives per generation instead of listing them
+        #[arg(long, requires = "relatives")]
+        count: bool,
         /// Output format [default: tree on a terminal, list otherwise]
         #[arg(long, value_enum)]
         format: Option<Format>,
@@ -76,6 +82,16 @@ enum Command {
     /// Overview of the file: format, counts, connections, data quality
     Summary {
         /// Output format: tree or list print text, json prints JSON
+        #[arg(long, value_enum)]
+        format: Option<Format>,
+    },
+    /// Who entered the data: people per submitter, or the people one submitter entered
+    Submitters {
+        /// Submitter name words (accents ignored); omit for the overview
+        query: Vec<String>,
+        /// Only print the number of people
+        #[arg(long)]
+        count: bool,
         #[arg(long, value_enum)]
         format: Option<Format>,
     },
@@ -116,14 +132,29 @@ fn run(cli: Cli) -> Result<()> {
             target,
             children,
             parents,
+            count,
             format,
-        } => show(&store, &target, children, parents, format),
+        } => show(
+            &store,
+            &target,
+            Relatives {
+                children,
+                parents,
+                count,
+            },
+            format,
+        ),
         Command::Edit {
             target,
             assignments,
             yes,
         } => edit(&mut store, &target, &assignments, yes),
         Command::Summary { format } => print_summary(&store, format),
+        Command::Submitters {
+            query,
+            count,
+            format,
+        } => print_submitters(&store, &query, count, format),
         Command::Migrate { dry_run } => migrate::migrate(&mut store, dry_run),
         Command::Export { version, output } => migrate::export(&store, &version, &output),
     }
@@ -135,6 +166,42 @@ fn print_summary(store: &Store, format: Option<Format>) -> Result<()> {
         println!("{}", serde_json::to_string_pretty(&summary)?);
     } else {
         print!("{}", summary::render(&summary));
+    }
+    Ok(())
+}
+
+fn print_submitters(
+    store: &Store,
+    query: &[String],
+    count: bool,
+    format: Option<Format>,
+) -> Result<()> {
+    let json = format == Some(Format::Json);
+    if query.is_empty() {
+        let tally = submitters::tally(&store.doc);
+        if json {
+            println!("{}", serde_json::to_string_pretty(&tally)?);
+        } else {
+            print!("{}", submitters::render_tally(&tally));
+        }
+        return Ok(());
+    }
+    let people = People::new(&store.doc);
+    let found = submitters::entries(&people, &query.join(" "));
+    if found.is_empty() {
+        bail!("no submitter matches; run `gedcli submitters` to see them all");
+    }
+    for entries in &found {
+        let total = entries.linked.len() + entries.unlinked_as_exporter.len();
+        match (json, count, format) {
+            (true, _, _) => println!("{}", serde_json::to_string_pretty(entries)?),
+            (false, true, _) => println!(
+                "{total}\t{}\t{}",
+                entries.submitter.name, entries.submitter.id
+            ),
+            (false, false, Some(Format::List)) => print!("{}", submitters::list_entries(entries)),
+            _ => print!("{}", submitters::render_entries(entries)),
+        }
     }
     Ok(())
 }
@@ -152,43 +219,98 @@ fn find(people: &People, target: &Target, interactive: bool, json: bool) -> Resu
     select::choose(search::find(people, &target.query.join(" ")), &choice)
 }
 
-fn show(
-    store: &Store,
-    target: &Target,
+struct Relatives {
     children: Option<u32>,
     parents: Option<u32>,
-    format: Option<Format>,
-) -> Result<()> {
+    count: bool,
+}
+
+fn show(store: &Store, target: &Target, wanted: Relatives, format: Option<Format>) -> Result<()> {
     let format = format.unwrap_or(if std::io::stdout().is_terminal() {
         Format::Tree
     } else {
         Format::List
     });
     let people = People::new(&store.doc);
-    let interactive = on_terminal() && format == Format::Tree;
+    let interactive = on_terminal() && format.is_visual();
     let person = find(&people, target, interactive, format == Format::Json)?;
-    if children.is_none() && parents.is_none() {
+    if wanted.children.is_none() && wanted.parents.is_none() {
         return show_card(&people, &person, format);
     }
-    let ancestors = parents.map(|n| relatives::ancestors(&people, &person.id, n));
-    let descendants = children.map(|n| relatives::descendants(&people, &person.id, n));
-    if format == Format::Json {
-        let value = json!({ "person": person, "ancestors": ancestors, "descendants": descendants });
-        println!("{}", serde_json::to_string_pretty(&value)?);
-        return Ok(());
+    if wanted.count {
+        return show_counts(&people, &person, &wanted, format);
     }
-    let draw = if format == Format::Tree {
-        render::tree
-    } else {
-        render::list
+    let ancestors = wanted
+        .parents
+        .map(|n| relatives::ancestors(&people, &person.id, n));
+    let descendants = wanted
+        .children
+        .map(|n| relatives::descendants(&people, &person.id, n));
+    let sections: Vec<String> = match format {
+        Format::Json => {
+            let value =
+                json!({ "person": person, "ancestors": ancestors, "descendants": descendants });
+            vec![format!("{}\n", serde_json::to_string_pretty(&value)?)]
+        }
+        Format::Chart => {
+            let up = ancestors.as_ref().map(chart::ancestors);
+            let down = descendants.as_ref().map(chart::descendants);
+            [up, down].into_iter().flatten().collect()
+        }
+        Format::Tree => [ancestors, descendants]
+            .iter()
+            .flatten()
+            .map(render::tree)
+            .collect(),
+        Format::List => [ancestors, descendants]
+            .iter()
+            .flatten()
+            .map(render::list)
+            .collect(),
     };
-    let sections: Vec<String> = [ancestors, descendants]
-        .iter()
-        .flatten()
-        .map(draw)
-        .collect();
-    print!("{}", sections.join("\n"));
+    let text = sections.join("\n");
+    warn_if_too_wide(&text, format);
+    print!("{text}");
     Ok(())
+}
+
+fn show_counts(people: &People, person: &Brief, wanted: &Relatives, format: Format) -> Result<()> {
+    let tables: Vec<count::Counts> = [
+        wanted.parents.map(|n| (n, count::Direction::Ancestors)),
+        wanted.children.map(|n| (n, count::Direction::Descendants)),
+    ]
+    .into_iter()
+    .flatten()
+    .map(|(n, direction)| count::count(people, &person.id, n, direction))
+    .collect();
+    match format {
+        Format::Json => println!("{}", serde_json::to_string_pretty(&tables)?),
+        Format::List => print!("{}", tables.iter().map(count::list).collect::<String>()),
+        _ => print!(
+            "{}",
+            tables
+                .iter()
+                .map(count::render)
+                .collect::<Vec<_>>()
+                .join("\n")
+        ),
+    }
+    Ok(())
+}
+
+fn warn_if_too_wide(text: &str, format: Format) {
+    if format != Format::Chart {
+        return;
+    }
+    let Some((_, columns)) = console::Term::stdout().size_checked() else {
+        return;
+    };
+    let widest = text.lines().map(|l| l.chars().count()).max().unwrap_or(0);
+    if widest > usize::from(columns) {
+        eprintln!(
+            "note: chart is {widest} columns wide, terminal has {columns}; use fewer generations or pipe to `less -S`"
+        );
+    }
 }
 
 fn show_card(people: &People, person: &Brief, format: Format) -> Result<()> {

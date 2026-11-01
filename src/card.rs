@@ -6,6 +6,7 @@ use gedcomkit::{Node, tags};
 use serde::Serialize;
 
 use crate::person::{Brief, People, brief_of, child_word, parent_word};
+use crate::submitters;
 
 const ID_TAGS: [&str; 5] = ["RFN", "EXID", "REFN", "RIN", "_UID"];
 
@@ -22,6 +23,7 @@ pub struct Card {
     pub parents: Vec<Relative>,
     pub families: Vec<FamilyCard>,
     pub ids: Vec<String>,
+    pub added_by: Option<String>,
     pub changed: Option<String>,
 }
 
@@ -64,6 +66,7 @@ pub fn build(people: &People, record: &Node) -> Card {
         parents: parents(people, &view.xref),
         families: families(people, &view.xref),
         ids: ids(record),
+        added_by: added_by(people, record),
         changed: changed(record).map(|t| t.display()),
     }
 }
@@ -162,6 +165,19 @@ fn media(record: &Node) -> Vec<String> {
         .collect()
 }
 
+fn added_by(people: &People, record: &Node) -> Option<String> {
+    let doc = people.doc;
+    match submitters::submitter_of(record) {
+        Some(xref) => Some(submitters::name_of(doc, xref)),
+        None => submitters::exporter(doc).map(|x| {
+            format!(
+                "{} (no submitter recorded; file exporter)",
+                submitters::name_of(doc, &x)
+            )
+        }),
+    }
+}
+
 fn ids(record: &Node) -> Vec<String> {
     record
         .children
@@ -252,6 +268,9 @@ pub fn render(card: &Card) -> String {
     }
     for id in &card.ids {
         line(&mut out, "Id", id);
+    }
+    if let Some(added_by) = &card.added_by {
+        line(&mut out, "Added by", added_by);
     }
     if let Some(changed) = &card.changed {
         line(&mut out, "Changed", changed);

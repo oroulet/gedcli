@@ -9,8 +9,15 @@ use crate::relatives::Rel;
 #[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum Format {
     Tree,
+    Chart,
     List,
     Json,
+}
+
+impl Format {
+    pub fn is_visual(self) -> bool {
+        matches!(self, Self::Tree | Self::Chart)
+    }
 }
 
 pub fn tree(rel: &Rel) -> String {
@@ -31,7 +38,7 @@ fn to_tree(rel: &Rel, root: bool) -> Tree<String> {
             partner => {
                 let name = partner
                     .as_ref()
-                    .map_or_else(|| "unknown partner".to_owned(), Brief::to_string);
+                    .map_or_else(|| "unknown partner".to_owned(), styled);
                 node.push(Tree::new(format!("⚭ {name}")).with_leaves(children));
             }
         }
@@ -50,7 +57,21 @@ fn label(rel: &Rel, root: bool) -> String {
     } else {
         ("", "")
     };
-    format!("{mark}{relation}{}{suffix}", rel.person)
+    format!("{mark}{relation}{}{suffix}", styled(&rel.person))
+}
+
+fn styled(person: &Brief) -> String {
+    let life = person
+        .life
+        .as_ref()
+        .map(|l| format!(" ({l})"))
+        .unwrap_or_default();
+    format!(
+        "{}{} {}",
+        console::style(&person.name).bold(),
+        console::style(life).dim(),
+        console::style(&person.id).dim()
+    )
 }
 
 fn is_parent(relation: &str) -> bool {

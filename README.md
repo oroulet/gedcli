@@ -18,10 +18,14 @@ real changes. gedcli also keeps the file's BOM and CRLF line endings.
     gedcli show kari lund                # person card (picker if several match)
     gedcli show lund --children          # descendants, 10 generations, as a tree
     gedcli show ola --parents 3           # ancestors, 3 generations
-    gedcli show ola --parents --format list|json|tree
+    gedcli show ola --parents --format list|json|tree|chart
+    gedcli show ola --parents --count     # ancestors per generation: found / possible / % complete
+    gedcli show ase --children 3 --format chart   # top-down chart (ancestors: root at the bottom)
     gedcli edit kari                       # interactive: pick field, type value, confirm
     gedcli edit kari --set birth.place=Bergen --set "birth.date=ABT 1950" --yes
-    gedcli summary [--format json]            # format, counts, connections, data quality
+    gedcli summary [--format json]            # format, counts, submitters, connections, data quality
+    gedcli submitters                         # people entered per submitter account
+    gedcli submitters "kari lund" [--count]       # the people one submitter entered
     gedcli migrate [--dry-run]                # convert the file in place to GEDCOM 7.0
     gedcli export --to 5.5.1 -o out.ged       # converted copy, e.g. for Geni
 
@@ -55,3 +59,16 @@ tags declared). gedcli then makes two clean-ups:
 - It drops the date `PHRASE`s that differ from the date only by zero-padding
   (`01 MAY 2022`).
 - It turns Geni `RFN geni:ID` into `EXID ID` + `TYPE https://www.geni.com/`.
+
+## Submitters
+
+Geni writes a `SUBM` link on each person, pointing to the account that entered
+or manages that profile. It leaves the link out for the exporting account's own
+profiles. So for the exporter, `gedcli submitters <name>` counts the linked
+people plus the people with no submitter, and lists the two groups separately.
+
+## Readability
+
+On a terminal, `tree` shows names in bold and dims dates and ids. `chart` wraps
+names to 18 columns and warns when it is wider than the terminal (pipe it to
+`less -S`, or ask for fewer generations). Piped output never has colours.
