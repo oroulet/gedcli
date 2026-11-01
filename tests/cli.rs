@@ -287,3 +287,19 @@ fn add_parent_creates_family_and_refuses_second_father() {
         stdout(gedcli(&file).args(["check", "--only", "one-sided-link", "--format", "list"]));
     assert_eq!(check, "# kind\tid\tname\tdetail\tfix\n");
 }
+
+#[test]
+fn edit_refuses_to_rewrite_a_file_with_misencoded_bytes() {
+    let (_dir, file) = workspace();
+    let mut bytes = fs::read(&file).unwrap();
+    let at = bytes.windows(4).position(|w| w == b"Kari").unwrap();
+    bytes.splice(at..at + 4, b"K\xe5ri".iter().copied());
+    for bytes in [bytes.clone(), bytes[3..].to_vec()] {
+        fs::write(&file, &bytes).unwrap();
+        gedcli(&file)
+            .args(["edit", "ola", "--set", "birth.place=Bergen", "--yes"])
+            .assert()
+            .failure();
+        assert_eq!(fs::read(&file).unwrap(), bytes);
+    }
+}
