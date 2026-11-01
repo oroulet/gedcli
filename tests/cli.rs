@@ -348,3 +348,14 @@ fn xref_with_punctuation_selects_the_person() {
     let out = stdout(gedcli(&file).args(["show", "@I_4@"]));
     assert!(out.starts_with("Ola Berg @I_4@\n"), "{out}");
 }
+
+#[test]
+fn empty_name_shows_as_unnamed() {
+    let (_dir, file) = workspace();
+    let text = fs::read_to_string(&file)
+        .unwrap()
+        .replace("1 NAME Per /Lund/", "1 NAME //");
+    fs::write(&file, text).unwrap();
+    let out = stdout(gedcli(&file).args(["show", "@I1@", "--children", "1", "--format", "list"]));
+    assert!(out.contains("0\tpartner\tUnnamed\t\t@I2@\n"), "{out}");
+}

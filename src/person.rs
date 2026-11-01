@@ -140,9 +140,14 @@ impl<'a> People<'a> {
 
 pub fn brief_of(record: &Node) -> Brief {
     let view = IndividualView::from_node(record);
+    let name = view.display_name();
     Brief {
         id: view.xref.clone(),
-        name: view.display_name(),
+        name: if name.trim().is_empty() {
+            "Unnamed".to_owned()
+        } else {
+            name
+        },
         life: view.life_years(),
         sex: record.value_of("SEX").filter(|s| !s.trim().is_empty()),
     }
