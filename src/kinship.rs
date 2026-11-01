@@ -119,29 +119,28 @@ pub fn kinship_name(up: u32, down: u32, sex: Option<&str>) -> String {
         }
         .to_owned()
     };
+    let either = |prefix: &str, male: &str, female: &str| -> String {
+        match sex {
+            Some("M") => format!("{prefix}{male}"),
+            Some("F") => format!("{prefix}{female}"),
+            _ => format!("{prefix}{male} or {prefix}{female}"),
+        }
+    };
     match (up, down) {
         (0, 0) => "same person".to_owned(),
-        (0, 1) => word("son", "daughter", "child"),
-        (0, d) => format!("{}grand{}", greats(d - 2), word("son", "daughter", "child")),
-        (1, 0) => word("father", "mother", "parent"),
-        (u, 0) => format!(
-            "{}grand{}",
-            greats(u - 2),
-            word("father", "mother", "parent")
-        ),
+        (0, d) => format!("{}{}", grand(d), word("son", "daughter", "child")),
+        (u, 0) => format!("{}{}", grand(u), word("father", "mother", "parent")),
         (1, 1) => word("brother", "sister", "sibling"),
-        (1, 2) => word("nephew", "niece", "nephew or niece"),
-        (1, d) => format!(
-            "{}grand{}",
-            greats(d - 3),
-            word("nephew", "niece", "nephew or niece")
-        ),
-        (u, 1) => format!(
-            "{}{}",
-            greats(u - 2),
-            word("uncle", "aunt", "uncle or aunt")
-        ),
+        (1, d) => either(&grand(d - 1), "nephew", "niece"),
+        (u, 1) => either(&greats(u - 2), "uncle", "aunt"),
         (u, d) => cousin(u.min(d) - 1, u.abs_diff(d)),
+    }
+}
+
+fn grand(generations: u32) -> String {
+    match generations {
+        0 | 1 => String::new(),
+        n => format!("{}grand", greats(n - 2)),
     }
 }
 
@@ -154,19 +153,29 @@ fn greats(n: u32) -> String {
 }
 
 fn cousin(degree: u32, removed: u32) -> String {
-    let ordinal = match degree {
-        1 => "first".to_owned(),
-        2 => "second".to_owned(),
-        3 => "third".to_owned(),
-        n => format!("{n}th"),
-    };
     let removed = match removed {
         0 => String::new(),
         1 => " once removed".to_owned(),
         2 => " twice removed".to_owned(),
         n => format!(" {n} times removed"),
     };
-    format!("{ordinal} cousin{removed}")
+    format!("{} cousin{removed}", ordinal(degree))
+}
+
+fn ordinal(n: u32) -> String {
+    let suffix = match (n % 10, n % 100) {
+        (_, 11..=13) => "th",
+        (1, _) => "st",
+        (2, _) => "nd",
+        (3, _) => "rd",
+        _ => "th",
+    };
+    match n {
+        1 => "first".to_owned(),
+        2 => "second".to_owned(),
+        3 => "third".to_owned(),
+        n => format!("{n}{suffix}"),
+    }
 }
 
 fn blood_path(people: &People, a: &str, b: &str, blood: &Blood) -> Path {
@@ -407,5 +416,23 @@ mod tests {
         assert_eq!(kinship_name(2, 2, None), "first cousin");
         assert_eq!(kinship_name(3, 2, None), "first cousin once removed");
         assert_eq!(kinship_name(4, 4, None), "third cousin");
+        assert_eq!(kinship_name(1, 1, None), "sibling");
+        assert_eq!(kinship_name(0, 2, None), "grandchild");
+    }
+
+    #[test]
+    fn neutral_names_repeat_the_prefix() {
+        assert_eq!(kinship_name(1, 2, None), "nephew or niece");
+        assert_eq!(
+            kinship_name(1, 4, None),
+            "great-grandnephew or great-grandniece"
+        );
+        assert_eq!(kinship_name(3, 1, None), "great-uncle or great-aunt");
+    }
+
+    #[test]
+    fn distant_cousins_have_proper_ordinals() {
+        assert_eq!(kinship_name(22, 22, None), "21st cousin");
+        assert_eq!(kinship_name(13, 12, None), "11th cousin once removed");
     }
 }
