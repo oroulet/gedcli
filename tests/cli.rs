@@ -220,3 +220,28 @@ fn html_embeds_tree_data() {
     assert!(page.contains("\"name\":\"Åse Lund\""));
     assert!(!page.contains("__DATA__"));
 }
+
+#[test]
+fn compare_reports_new_and_changed_people() {
+    let (dir, file) = workspace();
+    let other = dir.path().join("other.ged");
+    let text = fs::read_to_string(&file)
+        .unwrap()
+        .replacen("2 DATE 1950\r\n", "2 DATE 1951\r\n", 1)
+        .replacen(
+            "0 @F1@ FAM\r\n",
+            "0 @I5@ INDI\r\n1 NAME Nils /Berg/\r\n1 FAMC @F2@\r\n0 @F1@ FAM\r\n",
+            1,
+        )
+        .replacen("1 CHIL @I4@\r\n", "1 CHIL @I4@\r\n1 CHIL @I5@\r\n", 1);
+    fs::write(&other, text).unwrap();
+    let out = stdout(
+        gedcli(&file)
+            .args(["compare", "--format", "list"])
+            .arg(&other),
+    );
+    assert!(out.contains("new\t@I5@\tNils Berg\tchild of Kari Lund (b. 1951) @I3@"));
+    assert!(out.contains("removed\t@I3@\tKari Lund\tbirth: 1950"));
+    assert!(out.contains("added\t@I3@\tKari Lund\tbirth: 1951"));
+    assert!(out.contains("added\t@I3@\tKari Lund\tchild: Nils Berg @I5@"));
+}

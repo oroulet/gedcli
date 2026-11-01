@@ -1,6 +1,7 @@
 mod card;
 mod chart;
 mod check;
+mod compare;
 mod count;
 mod edit;
 mod kinship;
@@ -120,6 +121,13 @@ enum Command {
         #[arg(long, short)]
         output: PathBuf,
     },
+    /// Compare with another GEDCOM file (e.g. a newer Geni export): new, missing and changed people
+    Compare {
+        /// The other file
+        other: PathBuf,
+        #[arg(long, value_enum)]
+        format: Option<Format>,
+    },
     /// Overview of the file: format, counts, connections, data quality
     Summary {
         /// Output format: tree or list print text, json prints JSON
@@ -210,6 +218,7 @@ fn run(cli: Cli) -> Result<()> {
             children,
             output,
         } => html(&store, &target, parents, children, &output),
+        Command::Compare { other, format } => print_compare(&store, other, format),
         Command::Summary { format } => print_summary(&store, format),
         Command::Submitters {
             query,
@@ -368,6 +377,22 @@ fn html(
     );
     store::write_atomic(output, page.as_bytes())?;
     println!("wrote {}", output.display());
+    Ok(())
+}
+
+fn print_compare(store: &Store, other: PathBuf, format: Option<Format>) -> Result<()> {
+    let theirs = Store::open(other)?;
+    let comparison = compare::compare(store, &theirs);
+    let format = format.unwrap_or(if std::io::stdout().is_terminal() {
+        Format::Tree
+    } else {
+        Format::List
+    });
+    match format {
+        Format::Json => println!("{}", serde_json::to_string_pretty(&comparison)?),
+        Format::List => print!("{}", compare::list(&comparison)),
+        _ => print!("{}", compare::render(&comparison)),
+    }
     Ok(())
 }
 
