@@ -339,3 +339,12 @@ fn relation_through_marriage_takes_the_closest_partner() {
         assert!(out.starts_with("relation\tstepdaughter\n"), "{out}");
     }
 }
+
+#[test]
+fn xref_with_punctuation_selects_the_person() {
+    let (_dir, file) = workspace();
+    let text = fs::read_to_string(&file).unwrap().replace("@I4@", "@I_4@");
+    fs::write(&file, text).unwrap();
+    let out = stdout(gedcli(&file).args(["show", "@I_4@"]));
+    assert!(out.starts_with("Ola Berg @I_4@\n"), "{out}");
+}

@@ -41,7 +41,11 @@ fn haystack(record: &Node) -> String {
 }
 
 fn as_xref(query: &str) -> Option<String> {
-    let bare = query.trim().trim_matches('@');
+    let query = query.trim();
+    if is_wrapped_xref(query) {
+        return Some(query.to_owned());
+    }
+    let bare = query.trim_matches('@');
     if bare.is_empty() || !bare.chars().all(|c| c.is_ascii_alphanumeric()) {
         return None;
     }
@@ -53,6 +57,13 @@ fn as_xref(query: &str) -> Option<String> {
     Some(format!("@{prefix}{bare}@"))
 }
 
+fn is_wrapped_xref(query: &str) -> bool {
+    query.len() > 2
+        && query.starts_with('@')
+        && query.ends_with('@')
+        && !query[1..query.len() - 1].contains(['@', ' '])
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -62,6 +73,7 @@ mod tests {
         assert_eq!(as_xref("@I12@").as_deref(), Some("@I12@"));
         assert_eq!(as_xref("I12").as_deref(), Some("@I12@"));
         assert_eq!(as_xref("12").as_deref(), Some("@I12@"));
+        assert_eq!(as_xref("@P_1-a@").as_deref(), Some("@P_1-a@"));
         assert_eq!(as_xref("kari"), None);
         assert_eq!(as_xref("Ola 2"), None);
     }
