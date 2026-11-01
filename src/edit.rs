@@ -272,18 +272,18 @@ fn set(record: &mut Node, field: Field, value: Option<&str>) {
 }
 
 fn set_name_part(record: &mut Node, field: Field, value: Option<&str>) {
+    let old = get(record, field);
     let index = match record.children.iter().position(|n| n.tag() == "NAME") {
         Some(index) => index,
         None => insert_child(record, Node::new("NAME"), 0),
     };
     let name_node = &mut record.children[index];
-    let mut name = PersonalName::from_node(name_node);
-    let (slot, sub) = match field {
-        Field::Given => (&mut name.given, "GIVN"),
-        _ => (&mut name.surname, "SURN"),
+    let payload = name_node.logical_value();
+    let (updated, sub) = match field {
+        Field::Given => (with_given(&payload, old.as_deref(), value), "GIVN"),
+        _ => (with_surname(&payload, old.as_deref(), value), "SURN"),
     };
-    *slot = value.map(str::to_owned);
-    name_node.set_logical_value(&name_payload(&name));
+    name_node.set_logical_value(&updated);
     if let Some(i) = name_node.children.iter().position(|n| n.tag() == sub) {
         match value {
             Some(v) => name_node.children[i].set_value(Some(v.to_owned())),
@@ -294,17 +294,65 @@ fn set_name_part(record: &mut Node, field: Field, value: Option<&str>) {
     }
 }
 
-fn name_payload(name: &PersonalName) -> String {
-    let given = name.given.as_deref().unwrap_or_default();
-    let mut payload = match &name.surname {
-        Some(surname) => format!("{given} /{surname}/").trim_start().to_owned(),
-        None => given.to_owned(),
-    };
-    if let Some(suffix) = &name.suffix {
-        payload.push(' ');
-        payload.push_str(suffix);
+type Surname<'a> = Option<(&'a str, &'a str)>;
+
+fn split_payload(payload: &str) -> (&str, Surname<'_>) {
+    match payload.split_once('/') {
+        None => (payload, None),
+        Some((given, after)) => match after.split_once('/') {
+            Some((surname, rest)) => (given, Some((surname, rest))),
+            None => (given, Some((after, ""))),
+        },
     }
-    payload
+}
+
+fn join_payload(given: &str, surname: Surname) -> String {
+    let Some((surname, rest)) = surname else {
+        return given.to_owned();
+    };
+    let slashed = format!("/{surname}/{rest}");
+    if given.is_empty() {
+        slashed
+    } else {
+        format!("{given} {slashed}")
+    }
+}
+
+fn with_given(payload: &str, old: Option<&str>, new: Option<&str>) -> String {
+    let (given, surname) = split_payload(payload);
+    join_payload(&replace_words(given, old, new), surname)
+}
+
+fn with_surname(payload: &str, old: Option<&str>, new: Option<&str>) -> String {
+    let (given, surname) = split_payload(payload);
+    let given = given.trim();
+    match (surname, new) {
+        (None, None) => payload.to_owned(),
+        (None, Some(new)) => join_payload(given, Some((new, ""))),
+        (Some((part, rest)), _) => {
+            let part = replace_words(part, old, new);
+            if part.is_empty() {
+                format!("{given}{rest}").trim().to_owned()
+            } else {
+                join_payload(given, Some((&part, rest)))
+            }
+        }
+    }
+}
+
+fn replace_words(part: &str, old: Option<&str>, new: Option<&str>) -> String {
+    let words: Vec<&str> = part.split_whitespace().collect();
+    let old: Vec<&str> = old.unwrap_or_default().split_whitespace().collect();
+    let new: Vec<&str> = new.unwrap_or_default().split_whitespace().collect();
+    let found = (!old.is_empty())
+        .then(|| words.windows(old.len()).position(|w| w == old.as_slice()))
+        .flatten();
+    let Some(at) = found else {
+        return new.join(" ");
+    };
+    [&words[..at], &new, &words[at + old.len()..]]
+        .concat()
+        .join(" ")
 }
 
 fn set_simple(record: &mut Node, tag: &str, value: Option<&str>) {
@@ -547,6 +595,30 @@ mod tests {
             render(&p),
             "0 @I1@ INDI\n1 NAME Ann /Berg/\n2 GIVN Ann\n2 SURN Berg\n"
         );
+    }
+
+    #[test]
+    fn name_edits_keep_title_particle_suffix_and_nickname() {
+        let text = "0 @I1@ INDI\n1 NAME Dr. Jan /van Berg/ Jr.\n2 NPFX Dr.\n2 GIVN Jan\n2 SPFX van\n2 SURN Berg\n2 NSFX Jr.\n";
+        let mut p = person(text);
+        apply(&mut p, Field::Given, "Johan", true).unwrap();
+        apply(&mut p, Field::Surname, "Strand", true).unwrap();
+        assert!(render(&p).starts_with("0 @I1@ INDI\n1 NAME Dr. Johan /van Strand/ Jr.\n2 NPFX Dr.\n2 GIVN Johan\n2 SPFX van\n2 SURN Strand\n"));
+        let mut p = person("0 @I1@ INDI\n1 NAME Kari 'Mia' /Lund/\n2 GIVN Kari\n");
+        apply(&mut p, Field::Surname, "Berg", true).unwrap();
+        assert!(render(&p).contains("1 NAME Kari 'Mia' /Berg/\n"));
+    }
+
+    #[test]
+    fn name_parts_can_be_added_and_removed() {
+        let mut p = person("0 @I1@ INDI\n1 NAME Ann\n");
+        apply(&mut p, Field::Surname, "Lee", true).unwrap();
+        assert!(render(&p).contains("1 NAME Ann /Lee/\n"));
+        apply(&mut p, Field::Given, "", true).unwrap();
+        assert!(render(&p).contains("1 NAME /Lee/\n"));
+        apply(&mut p, Field::Given, "Per Ole", true).unwrap();
+        apply(&mut p, Field::Surname, "", true).unwrap();
+        assert!(render(&p).contains("1 NAME Per Ole\n"));
     }
 
     #[test]
