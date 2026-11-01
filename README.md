@@ -44,7 +44,7 @@ case and accents. An xref (`@I123@`, `I123`) selects one person directly.
 ## For scripts and AI
 
 - When stdout isn't a terminal the default format is `list` (tab-separated:
-  `gen path name life id`). Use `--format json` for structured output.
+  `gen path name life id info`). Use `--format json` for structured output.
 - If several people match and there's no terminal, gedcli prints the numbered
   candidates and exits with code 2. Rerun with `--pick N` or the xref.
 - `edit` without a terminal needs `--set` and `--yes`.
@@ -87,6 +87,10 @@ profiles. So for the exporter, `gedcli submitters <name>` counts the linked
 people plus the people with no submitter, and lists the two groups separately.
 
 ## Readability
+
+Trees, charts, HTML, `list` and `json` show a short `info` next to each
+person: their occupation, or else a short one-line note (at most 50 characters,
+with Geni's `{geni:about_me}` prefix removed and source references skipped).
 
 On a terminal, `tree` colours names by sex (blue male, pink female, white unknown) and dims dates. It leaves out xrefs unless you pass `--ids`; `list` and `json` always include them. `chart` wraps
 names to 18 columns and warns when it is wider than the terminal (pipe it to

@@ -69,6 +69,7 @@ fn person_lines(rel: &Rel) -> Vec<String> {
     let mark = if rel.repeat { "↺ " } else { "" };
     let mut lines = wrap(&format!("{mark}{}", rel.person.name));
     lines.extend(rel.person.life.clone());
+    lines.extend(rel.person.info.as_deref().map(wrap).unwrap_or_default());
     lines
 }
 

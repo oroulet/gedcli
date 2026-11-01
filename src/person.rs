@@ -13,6 +13,8 @@ pub struct Brief {
     pub life: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sex: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub info: Option<String>,
 }
 
 impl fmt::Display for Brief {
@@ -66,6 +68,7 @@ impl<'a> People<'a> {
                 name: "(missing record)".to_owned(),
                 life: None,
                 sex: None,
+                info: None,
             },
         }
     }
@@ -150,7 +153,30 @@ pub fn brief_of(record: &Node) -> Brief {
         },
         life: view.life_years(),
         sex: record.value_of("SEX").filter(|s| !s.trim().is_empty()),
+        info: occupation(record).or_else(|| short_note(record)),
     }
+}
+
+const SHORT_NOTE: usize = 50;
+const GENI_NOTE_PREFIX: &str = "{geni:about_me}";
+
+fn occupation(record: &Node) -> Option<String> {
+    record
+        .all("OCCU")
+        .map(|n| n.logical_value().trim().to_owned())
+        .find(|v| !v.is_empty() && !v.eq_ignore_ascii_case("unknown"))
+}
+
+fn short_note(record: &Node) -> Option<String> {
+    let note = record
+        .all("NOTE")
+        .find(|n| n.pointer().is_none())?
+        .logical_value();
+    let text = note.trim().trim_start_matches(GENI_NOTE_PREFIX).trim();
+    let is_reference = text.contains("http") || text.starts_with(['*', '[', '\'']);
+    let single_line = !text.contains('\n');
+    let short = text.chars().count() <= SHORT_NOTE;
+    (!text.is_empty() && !is_reference && single_line && short).then(|| text.to_owned())
 }
 
 pub fn child_word(sex: Option<&str>) -> &'static str {
@@ -174,5 +200,43 @@ fn sex_rank(sex: Option<&str>) -> u8 {
         Some("M") => 0,
         Some("F") => 1,
         _ => 2,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gedcomkit::Document;
+
+    fn info(lines: &str) -> Option<String> {
+        let doc = Document::parse(&format!("0 HEAD\n0 @I1@ INDI\n{lines}0 TRLR\n")).unwrap();
+        brief_of(&doc.records[1]).info
+    }
+
+    #[test]
+    fn occupation_wins_and_unknown_is_skipped() {
+        assert_eq!(
+            info("1 OCCU unknown\n1 OCCU nurse\n1 NOTE short\n").as_deref(),
+            Some("nurse")
+        );
+    }
+
+    #[test]
+    fn short_note_without_geni_prefix() {
+        assert_eq!(
+            info("1 NOTE {geni:about_me} photo taken 1965\n").as_deref(),
+            Some("photo taken 1965")
+        );
+    }
+
+    #[test]
+    fn references_and_long_notes_are_skipped() {
+        assert_eq!(
+            info("1 NOTE {geni:about_me} * Reference: [https://example.org]\n"),
+            None
+        );
+        assert_eq!(info("1 NOTE see http://example.org\n"), None);
+        assert_eq!(info(&format!("1 NOTE {}\n", "x".repeat(51))), None);
+        assert_eq!(info("1 NOTE first line\n2 CONT second line\n"), None);
     }
 }

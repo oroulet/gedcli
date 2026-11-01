@@ -43,6 +43,7 @@ section + section { margin-top: 0; }
 .card.union { border-style: dashed; border-top-width: 1px; min-width: 0; color: var(--muted); }
 .card .name { font-weight: 600; }
 .card .life, .card .id, .card .partner { color: var(--muted); font-size: 12px; }
+.card .info { font-size: 12px; font-style: italic; }
 .card .partner { margin-top: 4px; border-top: 1px dashed var(--line); padding-top: 4px; }
 .card.repeat { opacity: .6; }
 body:not(.ids) .card .id { display: none; }
@@ -75,6 +76,7 @@ function card(person, repeat, partner) {
   const c = el('div', 'card ' + (person.sex || 'U') + (repeat ? ' repeat' : ''));
   c.append(el('div', 'name', (repeat ? '↺ ' : '') + person.name));
   if (person.life) c.append(el('div', 'life', person.life));
+  if (person.info) c.append(el('div', 'info', person.info));
   c.append(el('div', 'id', person.id));
   if (partner) c.append(el('div', 'partner', '∞ ' + partner.name + (partner.life ? ' (' + partner.life + ')' : '')));
   c.dataset.search = fold(person.name + ' ' + (partner ? partner.name : ''));

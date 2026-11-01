@@ -49,11 +49,11 @@ fn descendants_as_list() {
     let out = stdout(gedcli(&file).args(["show", "@I1@", "--children", "--format", "list"]));
     assert_eq!(
         out,
-        "# gen\tpath\tname\tlife\tid\n\
-         0\tself\tÅse Lund\tb. 1920\t@I1@\n\
-         0\tpartner\tPer Lund\t\t@I2@\n\
-         1\tdaughter\tKari Lund\tb. 1950\t@I3@\n\
-         2\tdaughter>son\tOla Berg\t\t@I4@\n"
+        "# gen\tpath\tname\tlife\tid\tinfo\n\
+         0\tself\tÅse Lund\tb. 1920\t@I1@\t\n\
+         0\tpartner\tPer Lund\t\t@I2@\t\n\
+         1\tdaughter\tKari Lund\tb. 1950\t@I3@\t\n\
+         2\tdaughter>son\tOla Berg\t\t@I4@\t\n"
     );
 }
 
@@ -357,7 +357,7 @@ fn empty_name_shows_as_unnamed() {
         .replace("1 NAME Per /Lund/", "1 NAME //");
     fs::write(&file, text).unwrap();
     let out = stdout(gedcli(&file).args(["show", "@I1@", "--children", "1", "--format", "list"]));
-    assert!(out.contains("0\tpartner\tUnnamed\t\t@I2@\n"), "{out}");
+    assert!(out.contains("0\tpartner\tUnnamed\t\t@I2@\t\n"), "{out}");
 }
 
 #[cfg(unix)]

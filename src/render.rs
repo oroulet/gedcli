@@ -80,10 +80,16 @@ fn styled(person: &Brief, ids: bool) -> String {
     } else {
         String::new()
     };
+    let info = person
+        .info
+        .as_ref()
+        .map(|i| format!(" · {i}"))
+        .unwrap_or_default();
     format!(
-        "{}{}{}",
+        "{}{}{}{}",
         sex_style(person.sex.as_deref()).apply_to(&person.name),
         console::style(life).dim(),
+        console::style(info).italic(),
         console::style(id).dim()
     )
 }
@@ -93,7 +99,7 @@ fn is_parent(relation: &str) -> bool {
 }
 
 pub fn list(rel: &Rel) -> String {
-    let mut out = String::from("# gen\tpath\tname\tlife\tid\n");
+    let mut out = String::from("# gen\tpath\tname\tlife\tid\tinfo\n");
     list_into(&mut out, rel, 0, "");
     out
 }
@@ -129,9 +135,10 @@ fn join(parent: &str, relation: &str) -> String {
 
 fn row(out: &mut String, generation: u32, path: &str, person: &Brief) {
     let life = person.life.as_deref().unwrap_or("");
+    let info = person.info.as_deref().unwrap_or("");
     let _ = writeln!(
         out,
-        "{generation}\t{path}\t{}\t{life}\t{}",
+        "{generation}\t{path}\t{}\t{life}\t{}\t{info}",
         person.name, person.id
     );
 }
