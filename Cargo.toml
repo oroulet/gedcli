@@ -14,9 +14,11 @@ exclude = [".gitattributes", "comments.md"]
 anyhow = "1.0.104"
 clap = { version = "4.6.7", features = ["derive", "env"] }
 console = "0.16"
+crossterm = "0.29"
 deunicode = "1.6.2"
 dialoguer = { version = "0.12.0", features = ["fuzzy-select"] }
 gedcomkit = { version = "0.1.19", features = ["serde"] }
+ratatui = "0.30"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 termtree = "1.0.0"

@@ -15,6 +15,7 @@ mod select;
 mod store;
 mod submitters;
 mod summary;
+mod ui;
 
 use std::io::IsTerminal;
 use std::path::PathBuf;
@@ -97,6 +98,11 @@ enum Command {
         /// Write without asking for confirmation
         #[arg(long, short)]
         yes: bool,
+    },
+    /// Full-screen browser: a person with partner, parents and children; edit and add as you go
+    Ui {
+        /// Name words or an xref to start from [default: the first person in the file]
+        query: Vec<String>,
     },
     /// Edit a person's common fields, interactively or with --set
     #[command(after_help = format!("Fields: {}", edit::field_keys()))]
@@ -251,6 +257,7 @@ fn run(cli: Cli) -> Result<()> {
                 yes,
             )
         }
+        Command::Ui { query } => start_ui(&mut store, &query),
         Command::Edit {
             target,
             assignments,
@@ -541,6 +548,28 @@ fn choose_family(people: &People, anchor: &Brief, interactive: bool) -> Result<O
         .default(0)
         .interact()?;
     Ok(Some(unions[index].family.clone()))
+}
+
+fn start_ui(store: &mut Store, query: &[String]) -> Result<()> {
+    if !on_terminal() {
+        bail!("`gedcli ui` needs a terminal; use show, edit or add from scripts");
+    }
+    let start = {
+        let people = People::new(&store.doc);
+        if query.is_empty() {
+            people
+                .individuals()
+                .find_map(|r| r.xref().map(str::to_owned))
+                .context("the file has no people")?
+        } else {
+            let target = Target {
+                query: query.to_vec(),
+                pick: None,
+            };
+            find(&people, &target, true, false)?.id
+        }
+    };
+    ui::run(store, start)
 }
 
 fn on_terminal() -> bool {

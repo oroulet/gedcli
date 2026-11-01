@@ -23,6 +23,7 @@ real changes. gedcli also keeps the file's BOM and CRLF line endings.
     gedcli show ola --parents --format list|json|tree|chart
     gedcli show ola --parents --count         # ancestors per generation: found / possible / % complete
     gedcli show ase --children 3 --format chart   # top-down chart (ancestors: root at the bottom)
+    gedcli ui kari lund                       # full-screen browser: navigate, edit, add
     gedcli edit kari                          # interactive: pick field, type value, confirm
     gedcli edit kari --set birth.place=Bergen --set "birth.date=ABT 1950" --yes
     gedcli relation "kari lund" ola           # Ola is Kari's son, with common ancestors and path
@@ -95,6 +96,30 @@ with Geni's `{geni:about_me}` prefix removed and source references skipped).
 On a terminal, `tree` colours names by sex (blue male, pink female, white unknown) and dims dates. It leaves out xrefs unless you pass `--ids`; `list` and `json` always include them. `chart` wraps
 names to 18 columns and warns when it is wider than the terminal (pipe it to
 `less -S`, or ask for fewer generations). Piped output never has colours.
+
+## Terminal UI
+
+`gedcli ui [name]` opens a full-screen view centred on one person:
+
+- Their partner sits beside them, parents above, and children of that
+  partnership below.
+- On a tall terminal, grandparents and grandchildren appear too.
+- Rows with more people than fit scroll sideways as you move.
+
+| Keys | Does |
+|---|---|
+| ←↓↑→ / h j k l | move between people |
+| Enter | put the highlighted person in the centre |
+| b / Backspace | back to the previous person |
+| n / Tab | next partner (the children row follows) |
+| / | find someone by name |
+| e | edit the highlighted person's fields |
+| c / p | add a child / a parent to the highlighted person |
+| ? | help |
+| q / Esc | quit |
+
+Every edit or addition is saved to the file at once, with the same checks as
+`edit` and `add`. If saving fails, the change is undone in memory too.
 
 ## Adding people
 
