@@ -1,0 +1,56 @@
+# gedcli
+
+Browse and edit a GEDCOM family tree from the command line. Built on
+[gedcomkit](https://crates.io/crates/gedcomkit), which preserves bytes: lines
+you don't edit are written back exactly, so `git diff` on the data shows only
+real changes. gedcli also keeps the file's BOM and CRLF line endings.
+
+## Install
+
+    cargo install --path .
+
+## File
+
+`--file F`, else `$GEDCLI_FILE`, else the only `*.ged` in the current directory.
+
+## Commands
+
+    gedcli show kari lund                # person card (picker if several match)
+    gedcli show lund --children          # descendants, 10 generations, as a tree
+    gedcli show ola --parents 3           # ancestors, 3 generations
+    gedcli show ola --parents --format list|json|tree
+    gedcli edit kari                       # interactive: pick field, type value, confirm
+    gedcli edit kari --set birth.place=Bergen --set "birth.date=ABT 1950" --yes
+    gedcli migrate [--dry-run]                # convert the file in place to GEDCOM 7.0
+    gedcli export --to 5.5.1 -o out.ged       # converted copy, e.g. for Geni
+
+Queries match every word against all names (given, surname, married), ignoring
+case and accents. An xref (`@I123@`, `I123`) selects one person directly.
+
+## For scripts and AI
+
+- When stdout isn't a terminal the default format is `list` (tab-separated:
+  `gen path name life id`). Use `--format json` for structured output.
+- If several people match and there's no terminal, gedcli prints the numbered
+  candidates and exits with code 2. Rerun with `--pick N` or the xref.
+- `edit` without a terminal needs `--set` and `--yes`.
+- A person reached twice in a tree (pedigree collapse) is marked `repeat` and
+  not expanded again.
+
+## Edit fields
+
+`name.given`, `name.surname`, `sex`, `birth.date`, `birth.place`, `death.date`,
+`death.place`, `burial.date`, `burial.place`, `occupation`, `note`.
+
+An empty value removes the field. Dates are checked and written in the
+file version's grammar (`about 12 june 1950` becomes `ABT 12 JUN 1950`). Each
+edit updates the record's `CHAN` timestamp (UTC). Removing the last detail of a
+death or burial keeps `DEAT Y` / `BURI Y`, so the fact itself stays.
+
+## Migration to 7.0
+
+gedcomkit does the conversion (CONC folded, media types, CHAR dropped, extension
+tags declared). gedcli then makes two clean-ups:
+- It drops the date `PHRASE`s that differ from the date only by zero-padding
+  (`01 MAY 2022`).
+- It turns Geni `RFN geni:ID` into `EXID ID` + `TYPE https://www.geni.com/`.
