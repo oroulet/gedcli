@@ -475,8 +475,11 @@ fn insert_child(record: &mut Node, child: Node, at: usize) -> usize {
 pub fn touch(record: &mut Node) {
     let (date, time) = now_utc();
     let stamp = timestamp_node("CHAN", date, Some(&time));
-    match record.children.iter().position(|n| n.tag() == "CHAN") {
-        Some(i) => record.children[i] = stamp,
+    match record.children.iter_mut().find(|n| n.tag() == "CHAN") {
+        Some(chan) => {
+            chan.children.retain(|n| n.tag() != "DATE");
+            chan.children.splice(0..0, stamp.children);
+        }
         None => record.children.push(stamp),
     }
 }
@@ -627,6 +630,16 @@ mod tests {
         apply(&mut p, Field::Sex, "female", false).unwrap();
         assert_eq!(render(&p), "0 @I1@ INDI\n1 NAME Ann /Lee/\n1 SEX F\n");
         assert!(apply(&mut p, Field::Sex, "X", false).is_err());
+    }
+
+    #[test]
+    fn touch_replaces_only_the_change_date() {
+        let mut p =
+            person("0 @I1@ INDI\n1 CHAN\n2 DATE 1 JAN 2000\n3 TIME 10:00:00\n2 NOTE merged\n");
+        touch(&mut p);
+        let text = render(&p);
+        assert!(!text.contains("1 JAN 2000") && !text.contains("10:00:00"));
+        assert!(text.contains("\n3 TIME ") && text.ends_with("2 NOTE merged\n"));
     }
 
     #[test]
