@@ -9,6 +9,8 @@ const BOM: &[u8] = b"\xEF\xBB\xBF";
 pub struct Store {
     pub path: PathBuf,
     pub doc: Document,
+    pub encoding: String,
+    pub size: u64,
     bom: bool,
     crlf: bool,
 }
@@ -38,9 +40,11 @@ fn is_gedcom(path: &Path) -> bool {
 impl Store {
     pub fn open(path: PathBuf) -> Result<Self> {
         let bytes = fs::read(&path).with_context(|| format!("reading {}", path.display()))?;
-        let (doc, _) =
+        let (doc, report) =
             Document::from_bytes(&bytes).map_err(|err| anyhow!("{}: {err}", path.display()))?;
         Ok(Self {
+            encoding: report.summary(),
+            size: bytes.len() as u64,
             bom: bytes.starts_with(BOM),
             crlf: uses_crlf(&bytes),
             path,
@@ -54,6 +58,10 @@ impl Store {
 
     pub fn version(&self) -> String {
         self.doc.version().unwrap_or_else(|| "unknown".to_owned())
+    }
+
+    pub fn line_endings(&self) -> &'static str {
+        if self.crlf { "CRLF" } else { "LF" }
     }
 
     pub fn encode(&self, doc: &Document) -> Vec<u8> {

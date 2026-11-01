@@ -111,3 +111,16 @@ fn migrate_converts_to_v7() {
     assert!(text.contains("2 DATE 1 MAY 1920\r\n1 FAMS"));
     assert!(!text.contains("CHAR"));
 }
+
+#[test]
+fn summary_counts_people_and_connections() {
+    let (_dir, file) = workspace();
+    let out = stdout(gedcli(&file).arg("summary"));
+    assert!(out.contains("Records       2 FAM, 4 INDI"));
+    assert!(out.contains("People        4"));
+    assert!(out.contains("1 connected group(s) of 4 people; 0 isolated"));
+    assert!(out.contains("deepest     3 generations"));
+    let json = stdout(gedcli(&file).args(["summary", "--format", "json"]));
+    let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+    assert_eq!(value["people"]["total"], 4);
+}

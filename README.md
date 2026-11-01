@@ -21,6 +21,7 @@ real changes. gedcli also keeps the file's BOM and CRLF line endings.
     gedcli show ola --parents --format list|json|tree
     gedcli edit kari                       # interactive: pick field, type value, confirm
     gedcli edit kari --set birth.place=Bergen --set "birth.date=ABT 1950" --yes
+    gedcli summary [--format json]            # format, counts, connections, data quality
     gedcli migrate [--dry-run]                # convert the file in place to GEDCOM 7.0
     gedcli export --to 5.5.1 -o out.ged       # converted copy, e.g. for Geni
 

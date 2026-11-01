@@ -7,6 +7,7 @@ mod render;
 mod search;
 mod select;
 mod store;
+mod summary;
 
 use std::io::IsTerminal;
 use std::path::PathBuf;
@@ -72,6 +73,12 @@ enum Command {
         #[arg(long, short)]
         yes: bool,
     },
+    /// Overview of the file: format, counts, connections, data quality
+    Summary {
+        /// Output format: tree or list print text, json prints JSON
+        #[arg(long, value_enum)]
+        format: Option<Format>,
+    },
     /// Convert the file in place to GEDCOM 7.0
     Migrate {
         /// Only print what the conversion would do
@@ -116,9 +123,20 @@ fn run(cli: Cli) -> Result<()> {
             assignments,
             yes,
         } => edit(&mut store, &target, &assignments, yes),
+        Command::Summary { format } => print_summary(&store, format),
         Command::Migrate { dry_run } => migrate::migrate(&mut store, dry_run),
         Command::Export { version, output } => migrate::export(&store, &version, &output),
     }
+}
+
+fn print_summary(store: &Store, format: Option<Format>) -> Result<()> {
+    let summary = summary::build(store);
+    if format == Some(Format::Json) {
+        println!("{}", serde_json::to_string_pretty(&summary)?);
+    } else {
+        print!("{}", summary::render(&summary));
+    }
+    Ok(())
 }
 
 fn on_terminal() -> bool {
