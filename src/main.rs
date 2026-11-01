@@ -638,7 +638,11 @@ fn warn_if_too_wide(text: &str, format: Format) {
     let Some((_, columns)) = console::Term::stdout().size_checked() else {
         return;
     };
-    let widest = text.lines().map(|l| l.chars().count()).max().unwrap_or(0);
+    let widest = text
+        .lines()
+        .map(console::measure_text_width)
+        .max()
+        .unwrap_or(0);
     if widest > usize::from(columns) {
         eprintln!(
             "note: chart is {widest} columns wide, terminal has {columns}; use fewer generations or pipe to `less -S`"

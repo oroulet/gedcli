@@ -1,3 +1,5 @@
+use unicode_width::UnicodeWidthChar;
+
 use crate::relatives::Rel;
 
 const GAP: usize = 2;
@@ -25,7 +27,9 @@ pub fn ancestors(rel: &Rel) -> String {
     rows.reverse();
     for row in &mut rows {
         for cell in row.iter_mut() {
-            *cell = flip(*cell);
+            if let [c] = cell.chars().collect::<Vec<_>>()[..] {
+                *cell = flip(c).to_string();
+            }
         }
     }
     to_text(rows)
@@ -49,10 +53,16 @@ fn flip(c: char) -> char {
     }
 }
 
-fn to_text(rows: Vec<Vec<char>>) -> String {
+type Grid = Vec<Vec<String>>;
+
+fn to_text(rows: Grid) -> String {
     rows.into_iter()
-        .map(|row| row.into_iter().collect::<String>().trim_end().to_owned() + "\n")
+        .map(|row| row.concat().trim_end().to_owned() + "\n")
         .collect()
+}
+
+fn blank(height: usize, width: usize) -> Grid {
+    vec![vec![" ".to_owned(); width]; height]
 }
 
 fn person_lines(rel: &Rel) -> Vec<String> {
@@ -107,7 +117,11 @@ fn wrap(text: &str) -> Vec<String> {
 }
 
 fn width(text: &str) -> usize {
-    text.chars().count()
+    text.chars().map(columns).sum()
+}
+
+fn columns(c: char) -> usize {
+    c.width().unwrap_or(1)
 }
 
 fn label_width(node: &Box) -> usize {
@@ -149,7 +163,7 @@ fn place(node: &Box, left: usize, depth: usize, out: &mut Vec<Placed>) -> usize 
     center
 }
 
-fn draw(root: &Box) -> Vec<Vec<char>> {
+fn draw(root: &Box) -> Grid {
     let mut placed = Vec::new();
     place(root, 0, 0, &mut placed);
     let total = subtree_width(root);
@@ -158,13 +172,13 @@ fn draw(root: &Box) -> Vec<Vec<char>> {
     for depth in 0..depths {
         let level: Vec<&Placed> = placed.iter().filter(|p| p.depth == depth).collect();
         let height = level.iter().map(|p| p.lines.len()).max().unwrap_or(1);
-        let mut labels = vec![vec![' '; total]; height];
-        let mut links = vec![vec![' '; total]; 2];
+        let mut labels = blank(height, total);
+        let mut links = blank(2, total);
         for p in &level {
             write_label(&mut labels, p);
             if !p.child_centers.is_empty() {
                 for row in &mut labels[p.lines.len()..] {
-                    row[p.center] = '│';
+                    row[p.center] = "│".to_owned();
                 }
                 connect(&mut links, p);
             }
@@ -177,12 +191,27 @@ fn draw(root: &Box) -> Vec<Vec<char>> {
     rows
 }
 
-fn write_label(rows: &mut [Vec<char>], p: &Placed) {
+fn write_label(rows: &mut [Vec<String>], p: &Placed) {
     let label = label_width_of(&p.lines);
     for (row, line) in p.lines.iter().enumerate() {
         let start = p.left + (label - width(line)) / 2;
-        for (i, c) in line.chars().enumerate() {
-            rows[row][start + i] = c;
+        write_line(&mut rows[row], start, line);
+    }
+}
+
+fn write_line(row: &mut [String], start: usize, line: &str) {
+    let mut col = start;
+    for c in line.chars() {
+        match columns(c) {
+            0 if col > start => row[col - 1].push(c),
+            0 => row[col].push(c),
+            w => {
+                row[col] = c.to_string();
+                for cell in &mut row[col + 1..col + w] {
+                    cell.clear();
+                }
+                col += w;
+            }
         }
     }
 }
@@ -191,17 +220,17 @@ fn label_width_of(lines: &[String]) -> usize {
     lines.iter().map(|l| width(l)).max().unwrap_or(1)
 }
 
-fn connect(links: &mut [Vec<char>], p: &Placed) {
+fn connect(links: &mut [Vec<String>], p: &Placed) {
     let (Some(&first), Some(&last)) = (p.child_centers.first(), p.child_centers.last()) else {
         return;
     };
-    links[0][p.center] = '│';
+    links[0][p.center] = "│".to_owned();
     let lo = first.min(p.center);
     let hi = last.max(p.center);
     for (x, cell) in links[1].iter_mut().enumerate().take(hi + 1).skip(lo) {
         let up = x == p.center;
         let down = p.child_centers.contains(&x);
-        *cell = glyph(up, down, x > lo, x < hi);
+        *cell = glyph(up, down, x > lo, x < hi).to_string();
     }
 }
 
@@ -224,6 +253,16 @@ fn glyph(up: bool, down: bool, left: bool, right: bool) -> char {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn wide_and_combining_letters_keep_columns_aligned() {
+        assert_eq!(width("王小明"), 6);
+        assert_eq!(width("A\u{30a}se"), 3);
+        let mut row = vec![" ".to_owned(); 8];
+        write_line(&mut row, 1, "王A\u{30a}");
+        assert_eq!(row.concat(), " 王A\u{30a}    ");
+        assert_eq!(width(&row.concat()), 8);
+    }
 
     #[test]
     fn wraps_long_names() {

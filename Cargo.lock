@@ -250,6 +250,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "termtree 1.0.0",
+ "unicode-width",
 ]
 
 [[package]]
