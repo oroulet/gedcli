@@ -181,3 +181,18 @@ fn next_partner_switches_the_children_row() {
         "{second}"
     );
 }
+
+#[test]
+fn ctrl_c_quits_from_any_mode() {
+    let (_dir, mut store) = fixture_store();
+    let ctrl_c = KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL);
+    for opener in [None, Some('e'), Some('c'), Some('/')] {
+        let mut app = App::new("@I3@".to_owned());
+        if let Some(key) = opener {
+            press(&mut app, &mut store, KeyCode::Char(key));
+        }
+        let people = People::new(&store.doc);
+        app.key(ctrl_c, &people);
+        assert!(app.quit, "Ctrl-C did not quit after {opener:?}");
+    }
+}

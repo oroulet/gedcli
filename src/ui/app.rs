@@ -1,4 +1,4 @@
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::forms::{ADD_FIELDS, AddForm, EditForm, SearchForm};
 use super::screen::{CENTER, ROWS, Screen};
@@ -64,6 +64,10 @@ impl App {
     }
 
     pub fn key(&mut self, key: KeyEvent, people: &People) -> Effect {
+        if is_ctrl_c(key) {
+            self.quit = true;
+            return Effect::None;
+        }
         let screen = self.screen(people);
         match std::mem::replace(&mut self.mode, Mode::Browse) {
             Mode::Browse => self.browse_key(key, &screen, people),
@@ -274,6 +278,10 @@ impl App {
         self.mode = Mode::Add(form);
         Effect::None
     }
+}
+
+fn is_ctrl_c(key: KeyEvent) -> bool {
+    key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL)
 }
 
 fn open_field(form: &EditForm) -> Result<super::forms::Input, String> {

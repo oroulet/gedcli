@@ -116,7 +116,7 @@ names to 18 columns and warns when it is wider than the terminal (pipe it to
 | e | edit the highlighted person's fields |
 | c / p | add a child / a parent to the highlighted person |
 | ? | help |
-| q / Esc | quit |
+| q / Esc / Ctrl-C | quit |
 
 Every edit or addition is saved to the file at once, with the same checks as
 `edit` and `add`. If saving fails, the change is undone in memory too.
