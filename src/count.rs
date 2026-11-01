@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
 
 use serde::Serialize;
@@ -31,16 +31,16 @@ pub struct Generation {
 
 pub fn count(people: &People, root: &str, generations: u32, direction: Direction) -> Counts {
     let mut frontier: Vec<String> = vec![root.to_owned()];
-    let mut everyone: HashSet<String> = HashSet::new();
-    let mut appearances = 0;
+    let mut appearances: HashMap<String, usize> = HashMap::new();
     let mut rows = Vec::new();
-    for generation in 1..=generations {
+    for generation in 1..=generations.min(longest_possible_line(people)) {
         frontier = next_generation(people, &frontier, direction);
         if frontier.is_empty() {
             break;
         }
-        appearances += frontier.len();
-        everyone.extend(frontier.iter().map(|x| x.to_ascii_uppercase()));
+        for xref in &frontier {
+            *appearances.entry(xref.to_ascii_uppercase()).or_default() += 1;
+        }
         rows.push(Generation {
             generation,
             name: generation_name(generation, direction),
@@ -55,9 +55,13 @@ pub fn count(people: &People, root: &str, generations: u32, direction: Direction
             Direction::Descendants => "descendants",
         },
         generations: rows,
-        total_distinct: everyone.len(),
-        in_several_generations: appearances - everyone.len(),
+        total_distinct: appearances.len(),
+        in_several_generations: appearances.values().filter(|&&n| n > 1).count(),
     }
+}
+
+fn longest_possible_line(people: &People) -> u32 {
+    u32::try_from(people.individuals().count()).unwrap_or(u32::MAX)
 }
 
 fn next_generation(people: &People, frontier: &[String], direction: Direction) -> Vec<String> {
@@ -141,4 +145,36 @@ fn capitalized(word: &str) -> String {
         .next()
         .map(|c| c.to_uppercase().chain(chars).collect())
         .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use gedcomkit::Document;
+
+    use super::*;
+
+    fn doc(families: &str) -> Document {
+        let mut text = String::from("0 HEAD\n");
+        for xref in ["R", "P", "Q", "X"] {
+            text.push_str(&format!("0 @{xref}@ INDI\n"));
+        }
+        Document::parse(&format!("{text}{families}0 TRLR\n")).unwrap()
+    }
+
+    #[test]
+    fn a_person_in_three_generations_is_counted_once() {
+        let doc = doc("0 @F1@ FAM\n1 HUSB @X@\n1 WIFE @P@\n1 CHIL @R@\n\
+             0 @F2@ FAM\n1 HUSB @X@\n1 WIFE @Q@\n1 CHIL @P@\n\
+             0 @F3@ FAM\n1 HUSB @X@\n1 CHIL @Q@\n");
+        let counts = count(&People::new(&doc), "@R@", 10, Direction::Ancestors);
+        assert_eq!(counts.total_distinct, 3);
+        assert_eq!(counts.in_several_generations, 1);
+    }
+
+    #[test]
+    fn a_cyclic_pedigree_stops() {
+        let doc = doc("0 @F1@ FAM\n1 HUSB @P@\n1 CHIL @R@\n0 @F2@ FAM\n1 HUSB @R@\n1 CHIL @P@\n");
+        let counts = count(&People::new(&doc), "@R@", u32::MAX, Direction::Ancestors);
+        assert_eq!(counts.generations.len(), 4);
+    }
 }
