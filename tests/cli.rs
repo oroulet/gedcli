@@ -359,3 +359,28 @@ fn empty_name_shows_as_unnamed() {
     let out = stdout(gedcli(&file).args(["show", "@I1@", "--children", "1", "--format", "list"]));
     assert!(out.contains("0\tpartner\tUnnamed\t\t@I2@\n"), "{out}");
 }
+
+#[cfg(unix)]
+#[test]
+fn edit_writes_through_a_symlink_and_keeps_permissions() {
+    use std::os::unix::fs::PermissionsExt;
+    let (dir, file) = workspace();
+    fs::set_permissions(&file, fs::Permissions::from_mode(0o640)).unwrap();
+    let link = dir.path().join("link.ged");
+    std::os::unix::fs::symlink(&file, &link).unwrap();
+    gedcli(&link)
+        .args(["edit", "ola", "--set", "birth.place=Bergen", "--yes"])
+        .assert()
+        .success();
+    assert!(
+        fs::symlink_metadata(&link)
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
+    assert!(fs::read_to_string(&file).unwrap().contains("Bergen"));
+    assert_eq!(
+        fs::metadata(&file).unwrap().permissions().mode() & 0o777,
+        0o640
+    );
+}

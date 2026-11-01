@@ -92,10 +92,14 @@ impl Store {
 }
 
 pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
+    let path = fs::canonicalize(path).unwrap_or_else(|_| path.to_owned());
     let mut tmp = path.as_os_str().to_owned();
     tmp.push(".tmp");
     fs::write(&tmp, bytes).with_context(|| format!("writing {}", Path::new(&tmp).display()))?;
-    fs::rename(&tmp, path).with_context(|| format!("replacing {}", path.display()))
+    if let Ok(meta) = fs::metadata(&path) {
+        fs::set_permissions(&tmp, meta.permissions())?;
+    }
+    fs::rename(&tmp, &path).with_context(|| format!("replacing {}", path.display()))
 }
 
 fn damaged_text(report: &EncodingReport) -> Option<String> {
