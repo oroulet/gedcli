@@ -12,7 +12,7 @@ pub struct Store {
     pub encoding: String,
     pub size: u64,
     bom: bool,
-    crlf: bool,
+    newline: &'static str,
     damaged_text: Option<String>,
 }
 
@@ -47,7 +47,7 @@ impl Store {
             encoding: report.summary(),
             size: bytes.len() as u64,
             bom: bytes.starts_with(BOM),
-            crlf: uses_crlf(&bytes),
+            newline: newline_of(&bytes),
             damaged_text: damaged_text(&report),
             path,
             doc,
@@ -63,13 +63,17 @@ impl Store {
     }
 
     pub fn line_endings(&self) -> &'static str {
-        if self.crlf { "CRLF" } else { "LF" }
+        match self.newline {
+            "\r\n" => "CRLF",
+            "\r" => "CR",
+            _ => "LF",
+        }
     }
 
     pub fn encode(&self, doc: &Document) -> Vec<u8> {
         let mut text = String::from_utf8(doc.to_bytes()).expect("gedcomkit writes UTF-8");
-        if self.crlf {
-            text = text.replace('\n', "\r\n");
+        if self.newline != "\n" {
+            text = text.replace('\n', self.newline);
         }
         let mut bytes = if self.bom { BOM.to_vec() } else { Vec::new() };
         bytes.extend_from_slice(text.as_bytes());
@@ -102,9 +106,29 @@ fn damaged_text(report: &EncodingReport) -> Option<String> {
     (guessed || report.undecodable_bytes > 0).then(|| report.warnings.join(" "))
 }
 
-fn uses_crlf(bytes: &[u8]) -> bool {
-    bytes
+fn newline_of(bytes: &[u8]) -> &'static str {
+    let mut ends = bytes
         .iter()
-        .position(|&b| b == b'\n')
-        .is_some_and(|i| i > 0 && bytes[i - 1] == b'\r')
+        .copied()
+        .filter(|&b| b != 0)
+        .skip_while(|&b| b != b'\r' && b != b'\n');
+    match (ends.next(), ends.next()) {
+        (Some(b'\r'), Some(b'\n')) => "\r\n",
+        (Some(b'\r'), _) => "\r",
+        _ => "\n",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::newline_of;
+
+    #[test]
+    fn detects_line_endings() {
+        assert_eq!(newline_of(b"0 HEAD\r\n1 GEDC\r\n"), "\r\n");
+        assert_eq!(newline_of(b"0 HEAD\r1 GEDC\r"), "\r");
+        assert_eq!(newline_of(b"0 HEAD\n1 GEDC\n"), "\n");
+        assert_eq!(newline_of(b"\xff\xfe0\0 \0H\0\r\0\n\0"), "\r\n");
+        assert_eq!(newline_of(b"0 HEAD"), "\n");
+    }
 }

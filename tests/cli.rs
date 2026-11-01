@@ -303,3 +303,17 @@ fn edit_refuses_to_rewrite_a_file_with_misencoded_bytes() {
         assert_eq!(fs::read(&file).unwrap(), bytes);
     }
 }
+
+#[test]
+fn edit_keeps_bare_cr_line_endings() {
+    let (_dir, file) = workspace();
+    let text = fs::read_to_string(&file).unwrap().replace("\r\n", "\r");
+    fs::write(&file, &text).unwrap();
+    gedcli(&file)
+        .args(["edit", "ola", "--set", "birth.place=Bergen", "--yes"])
+        .assert()
+        .success();
+    let after = fs::read_to_string(&file).unwrap();
+    assert!(!after.contains('\n'));
+    assert!(after.starts_with(&text[..text.find("0 @I4@").unwrap()]));
+}
