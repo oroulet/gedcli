@@ -107,6 +107,19 @@ enum Command {
         #[arg(long, value_enum)]
         format: Option<Format>,
     },
+    /// Write an interactive HTML family tree (zoom, fold branches, search)
+    Html {
+        #[command(flatten)]
+        target: Target,
+        /// Ancestor generations [default: 10 when --children is not given]
+        #[arg(long, value_name = "GENERATIONS", num_args = 0..=1, default_missing_value = DEFAULT_GENERATIONS)]
+        parents: Option<u32>,
+        /// Descendant generations
+        #[arg(long, value_name = "GENERATIONS", num_args = 0..=1, default_missing_value = DEFAULT_GENERATIONS)]
+        children: Option<u32>,
+        #[arg(long, short)]
+        output: PathBuf,
+    },
     /// Overview of the file: format, counts, connections, data quality
     Summary {
         /// Output format: tree or list print text, json prints JSON
@@ -191,6 +204,12 @@ fn run(cli: Cli) -> Result<()> {
                 print_check(&store, &only, all, format)
             }
         }
+        Command::Html {
+            target,
+            parents,
+            children,
+            output,
+        } => html(&store, &target, parents, children, &output),
         Command::Summary { format } => print_summary(&store, format),
         Command::Submitters {
             query,
@@ -321,6 +340,34 @@ fn fix_countries(store: &mut Store, yes: bool) -> Result<()> {
         changed.len(),
         store.path.display()
     );
+    Ok(())
+}
+
+const TREE_TEMPLATE: &str = include_str!("tree.html");
+
+fn html(
+    store: &Store,
+    target: &Target,
+    parents: Option<u32>,
+    children: Option<u32>,
+    output: &std::path::Path,
+) -> Result<()> {
+    let people = People::new(&store.doc);
+    let person = find(&people, target, on_terminal(), false)?;
+    let parents = parents.or(if children.is_none() { Some(10) } else { None });
+    let data = json!({
+        "ancestors": parents.map(|n| relatives::ancestors(&people, &person.id, n)),
+        "descendants": children.map(|n| relatives::descendants(&people, &person.id, n)),
+    });
+    let title = format!("Family tree of {}", person.name)
+        .replace('&', "&amp;")
+        .replace('<', "&lt;");
+    let page = TREE_TEMPLATE.replace("__TITLE__", &title).replace(
+        "__DATA__",
+        &serde_json::to_string(&data)?.replace("</", "<\\/"),
+    );
+    store::write_atomic(output, page.as_bytes())?;
+    println!("wrote {}", output.display());
     Ok(())
 }
 

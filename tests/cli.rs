@@ -205,3 +205,18 @@ fn check_finds_one_sided_link_and_fixes_country() {
     let fixed = fs::read_to_string(&file).unwrap();
     assert!(fixed.contains("3 CTRY Norway\r\n") && !fixed.contains("Norge"));
 }
+
+#[test]
+fn html_embeds_tree_data() {
+    let (dir, file) = workspace();
+    let out = dir.path().join("tree.html");
+    gedcli(&file)
+        .args(["html", "ola", "-o"])
+        .arg(&out)
+        .assert()
+        .success();
+    let page = fs::read_to_string(&out).unwrap();
+    assert!(page.contains("<title>Family tree of Ola Berg</title>"));
+    assert!(page.contains("\"name\":\"Åse Lund\""));
+    assert!(!page.contains("__DATA__"));
+}
