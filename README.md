@@ -24,6 +24,8 @@ real changes. gedcli also keeps the file's BOM and CRLF line endings.
     gedcli edit kari                       # interactive: pick field, type value, confirm
     gedcli edit kari --set birth.place=Bergen --set "birth.date=ABT 1950" --yes
     gedcli relation "kari lund" ola      # Ola is Kari's son, with common ancestors and path
+    gedcli check [--only KIND] [--all]        # data problems, each with the edit command that fixes it
+    gedcli check --fix                        # rename country spellings (Norge, Nrwy. → Norway)
     gedcli summary [--format json]            # format, counts, submitters, connections, data quality
     gedcli submitters                         # people entered per submitter account
     gedcli submitters "kari lund" [--count]       # the people one submitter entered

@@ -180,3 +180,28 @@ fn relation_names_grandmother_and_in_law() {
     let out = stdout(gedcli(&file).args(["relation", "per", "åse", "--format", "list"]));
     assert!(out.starts_with("relation\twife\n"));
 }
+
+#[test]
+fn check_finds_one_sided_link_and_fixes_country() {
+    let (_dir, file) = workspace();
+    let text = fs::read_to_string(&file).unwrap();
+    let text = text
+        .replacen(
+            "1 FAMC @F2@\r\n",
+            "1 FAMC @F2@\r\n1 BIRT\r\n2 ADDR\r\n3 CTRY Norge\r\n",
+            1,
+        )
+        .replacen("1 CHIL @I4@\r\n", "", 1);
+    fs::write(&file, text).unwrap();
+    let out = stdout(gedcli(&file).args(["check", "--format", "list"]));
+    assert!(
+        out.contains("one-sided-link\t@I4@\tOla Berg\tFAMC @F2@, but the family has no CHIL back")
+    );
+    assert!(out.contains("country-spelling\t@I4@\tOla Berg\t\"Norge\" → Norway"));
+    gedcli(&file)
+        .args(["check", "--fix", "--yes"])
+        .assert()
+        .success();
+    let fixed = fs::read_to_string(&file).unwrap();
+    assert!(fixed.contains("3 CTRY Norway\r\n") && !fixed.contains("Norge"));
+}

@@ -433,6 +433,10 @@ pub fn touch(record: &mut Node) {
     }
 }
 
+pub fn current_year() -> i32 {
+    now_utc().0.year
+}
+
 fn now_utc() -> (DatePoint, String) {
     let secs = SystemTime::now()
         .duration_since(UNIX_EPOCH)

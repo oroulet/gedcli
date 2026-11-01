@@ -1,5 +1,6 @@
 mod card;
 mod chart;
+mod check;
 mod count;
 mod edit;
 mod kinship;
@@ -89,6 +90,23 @@ enum Command {
         #[arg(long, value_enum)]
         format: Option<Format>,
     },
+    /// List data problems, with the command that fixes each where there is one
+    Check {
+        /// Only these kinds (repeatable)
+        #[arg(long, value_enum)]
+        only: Vec<check::Kind>,
+        /// Show every issue instead of 10 per kind
+        #[arg(long)]
+        all: bool,
+        /// Rename country spellings (Norge, Nrwy. …) to one name, after confirmation
+        #[arg(long)]
+        fix: bool,
+        /// Write the fix without asking
+        #[arg(long, short)]
+        yes: bool,
+        #[arg(long, value_enum)]
+        format: Option<Format>,
+    },
     /// Overview of the file: format, counts, connections, data quality
     Summary {
         /// Output format: tree or list print text, json prints JSON
@@ -160,6 +178,19 @@ fn run(cli: Cli) -> Result<()> {
             yes,
         } => edit(&mut store, &target, &assignments, yes),
         Command::Relation { from, to, format } => relation(&store, &from, &to, format),
+        Command::Check {
+            only,
+            all,
+            fix,
+            yes,
+            format,
+        } => {
+            if fix {
+                fix_countries(&mut store, yes)
+            } else {
+                print_check(&store, &only, all, format)
+            }
+        }
         Command::Summary { format } => print_summary(&store, format),
         Command::Submitters {
             query,
@@ -240,6 +271,56 @@ fn relation(store: &Store, from: &str, to: &str, format: Option<Format>) -> Resu
         Format::List => print!("{}", kinship::list(&kinship)),
         _ => print!("{}", kinship::render(&kinship)),
     }
+    Ok(())
+}
+
+fn print_check(
+    store: &Store,
+    only: &[check::Kind],
+    all: bool,
+    format: Option<Format>,
+) -> Result<()> {
+    let people = People::new(&store.doc);
+    let mut issues = check::run(&people);
+    if !only.is_empty() {
+        issues.retain(|i| only.contains(&i.kind));
+    }
+    let format = format.unwrap_or(if std::io::stdout().is_terminal() {
+        Format::Tree
+    } else {
+        Format::List
+    });
+    match format {
+        Format::Json => println!("{}", serde_json::to_string_pretty(&issues)?),
+        Format::List => print!("{}", check::list(&issues)),
+        _ => print!("{}", check::render(&issues, all)),
+    }
+    Ok(())
+}
+
+fn fix_countries(store: &mut Store, yes: bool) -> Result<()> {
+    let mut doc = store.doc.clone();
+    let changed = check::fix_countries(&mut doc);
+    if changed.is_empty() {
+        println!("no country spellings to fix");
+        return Ok(());
+    }
+    let issues: Vec<check::Issue> = check::run(&People::new(&store.doc))
+        .into_iter()
+        .filter(|i| i.kind == check::Kind::CountrySpelling)
+        .collect();
+    print!("{}", check::render(&issues, true));
+    if !yes && !confirm(on_terminal())? {
+        println!("not written");
+        return Ok(());
+    }
+    store.doc = doc;
+    store.save()?;
+    println!(
+        "fixed {} people, wrote {}",
+        changed.len(),
+        store.path.display()
+    );
     Ok(())
 }
 
