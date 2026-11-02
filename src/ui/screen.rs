@@ -257,34 +257,60 @@ fn grandchildren(people: &People, children: &[String]) -> (Vec<Brief>, Vec<Group
     (briefs(people, &ids), links)
 }
 
+const NOTE_LINES: usize = 3;
+const GENI_NOTE_PREFIX: &str = "{geni:about_me}";
+
 fn details(people: &People, center: &str) -> Vec<String> {
     let Some(record) = people.record(center) else {
         return Vec::new();
     };
     let card = card::build(people, record);
-    let mut lines: Vec<String> = card
-        .events
-        .iter()
-        .map(|e| {
-            let text: Vec<&str> = [&e.value, &e.date, &e.place]
-                .into_iter()
-                .flatten()
-                .map(String::as_str)
-                .collect();
-            format!("{:<11}{}", e.label, text.join(" · "))
-        })
+    let (occupations, events): (Vec<_>, Vec<_>) =
+        card.events.iter().partition(|e| e.label == "Occupation");
+    let mut lines: Vec<String> = occupations
+        .into_iter()
+        .chain(events)
+        .map(event_line)
         .collect();
-    lines.extend(
-        card.notes
-            .iter()
-            .filter_map(|n| n.lines().next())
-            .map(|n| format!("{:<11}{n}", "Note")),
-    );
+    for note in &card.notes {
+        lines.extend(note_lines(note));
+    }
     lines.extend(
         card.contacts
             .iter()
             .map(|c| format!("{:<11}{c}", "Contact")),
     );
-    lines.extend(card.added_by.map(|by| format!("{:<11}{by}", "Added by")));
+    lines
+}
+
+fn event_line(event: &card::Event) -> String {
+    let text: Vec<&str> = [&event.value, &event.date, &event.place]
+        .into_iter()
+        .flatten()
+        .map(String::as_str)
+        .collect();
+    format!("{:<11}{}", event.label, text.join(" · "))
+}
+
+fn note_lines(note: &str) -> Vec<String> {
+    let text = note.trim().trim_start_matches(GENI_NOTE_PREFIX).trim();
+    let all: Vec<&str> = text
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .collect();
+    let mut lines: Vec<String> = all
+        .iter()
+        .take(NOTE_LINES)
+        .enumerate()
+        .map(|(i, line)| format!("{:<11}{line}", if i == 0 { "Note" } else { "" }))
+        .collect();
+    if all.len() > NOTE_LINES {
+        lines.push(format!(
+            "{:<11}… {} more lines (s shows all)",
+            "",
+            all.len() - NOTE_LINES
+        ));
+    }
     lines
 }

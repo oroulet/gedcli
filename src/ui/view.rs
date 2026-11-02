@@ -98,8 +98,11 @@ pub(super) fn person_lines(person: &Brief, width: u16) -> Vec<Line<'static>> {
 }
 
 pub(super) fn main_lines(screen: &Screen, width: u16) -> Vec<Line<'static>> {
-    let person = screen.center();
-    let mut lines = person_lines(person, width);
+    let person = Brief {
+        info: None,
+        ..screen.center().clone()
+    };
+    let mut lines = person_lines(&person, width);
     for line in lines.iter_mut().take(1) {
         *line = line
             .clone()

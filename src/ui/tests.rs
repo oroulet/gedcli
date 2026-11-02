@@ -346,3 +346,34 @@ fn esc_closes_pop_ups_but_never_quits() {
     press(&mut app, &mut store, KeyCode::Esc);
     assert!(!app.quit);
 }
+
+#[test]
+fn centre_details_show_occupation_and_notes_but_not_submitter() {
+    let (_dir, _) = fixture_store();
+    let dir = tempfile::TempDir::new().unwrap();
+    let path = dir.path().join("family.ged");
+    let text = std::fs::read_to_string("tests/family.ged").unwrap().replacen(
+        "1 FAMC @F1@\r\n1 FAMS @F2@\r\n",
+        "1 OCCU nurse\r\n1 NOTE first line\r\n2 CONT second line\r\n1 FAMC @F1@\r\n1 FAMS @F2@\r\n1 SUBM @S1@\r\n",
+        1,
+    );
+    std::fs::write(
+        &path,
+        text.replacen("0 TRLR", "0 @S1@ SUBM\r\n1 NAME Someone\r\n0 TRLR", 1),
+    )
+    .unwrap();
+    let store = Store::open(path).unwrap();
+    let mut app = App::new("@I3@".to_owned());
+    let screen_text = render_to_text(&store, &mut app, 100, 30);
+    for expected in [
+        "Occupation nurse",
+        "Note       first line",
+        "           second line",
+    ] {
+        assert!(
+            screen_text.contains(expected),
+            "missing {expected:?} in\n{screen_text}"
+        );
+    }
+    assert!(!screen_text.contains("Added by"), "{screen_text}");
+}
