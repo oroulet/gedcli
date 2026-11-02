@@ -1,5 +1,6 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
+use super::app::Mode;
 use super::*;
 
 pub fn fixture_store() -> (tempfile::TempDir, Store) {
@@ -277,4 +278,29 @@ fn siblings_sit_beside_the_person_and_link_to_the_parents() {
     press(&mut app, &mut store, KeyCode::Char('l'));
     press(&mut app, &mut store, KeyCode::Enter);
     assert_eq!(app.center, "@IG1@");
+}
+
+#[test]
+fn show_lists_all_properties_read_only() {
+    let (_dir, mut store) = fixture_store();
+    let before = std::fs::read(&store.path).unwrap();
+    let mut app = App::new("@I3@".to_owned());
+    press(&mut app, &mut store, KeyCode::Char('s'));
+    let text = render_to_text(&store, &mut app, 100, 30);
+    for expected in [
+        "Kari Lund — j/k scroll",
+        "Birth       1950",
+        "Mother      Åse Lund",
+        "  Son       Ola Berg",
+    ] {
+        assert!(text.contains(expected), "missing {expected:?} in\n{text}");
+    }
+    press(&mut app, &mut store, KeyCode::Esc);
+    assert!(matches!(app.mode, Mode::Browse));
+    press(&mut app, &mut store, KeyCode::Enter);
+    assert!(
+        matches!(app.mode, Mode::Show(_)),
+        "Enter on the centred person shows it"
+    );
+    assert_eq!(std::fs::read(&store.path).unwrap(), before);
 }

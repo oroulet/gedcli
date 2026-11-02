@@ -1,6 +1,6 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use super::forms::{ADD_FIELDS, AddForm, EditForm, SearchForm};
+use super::forms::{ADD_FIELDS, AddForm, EditForm, SearchForm, ShowForm};
 use super::screen::{CENTER, ROWS, Screen};
 use crate::add::Relation;
 use crate::edit::{FIELDS, Field};
@@ -10,6 +10,7 @@ pub enum Mode {
     Browse,
     Help,
     Search(SearchForm),
+    Show(ShowForm),
     Edit(EditForm),
     Add(AddForm),
 }
@@ -73,6 +74,7 @@ impl App {
         match std::mem::replace(&mut self.mode, Mode::Browse) {
             Mode::Browse => self.browse_key(key, &screen, people),
             Mode::Help => Effect::None,
+            Mode::Show(form) => self.show_key(key, form, people),
             Mode::Search(form) => self.search_key(key, form, people),
             Mode::Edit(form) => self.edit_key(key, form),
             Mode::Add(form) => self.add_key(key, form),
@@ -87,7 +89,11 @@ impl App {
             KeyCode::Char('l') | KeyCode::Right => self.move_sideways(screen, 1),
             KeyCode::Char('k') | KeyCode::Up => self.move_vertically(screen, -1),
             KeyCode::Char('j') | KeyCode::Down => self.move_vertically(screen, 1),
+            KeyCode::Enter if self.focused(screen).id == screen.center().id => {
+                self.open_show(screen, people)
+            }
             KeyCode::Enter => self.recenter_on_focus(screen),
+            KeyCode::Char('s') => self.open_show(screen, people),
             KeyCode::Char('b') | KeyCode::Backspace => self.back(),
             KeyCode::Char('n') | KeyCode::Tab => self.next_partner(screen),
             KeyCode::Char('/') => self.mode = Mode::Search(SearchForm::new()),
@@ -194,6 +200,28 @@ impl App {
                 screen.partners.len()
             );
         }
+    }
+
+    fn open_show(&mut self, screen: &Screen, people: &People) {
+        self.mode = Mode::Show(ShowForm::new(people, self.focused(screen).clone()));
+    }
+
+    fn show_key(&mut self, key: KeyEvent, mut form: ShowForm, people: &People) -> Effect {
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('q' | 's') | KeyCode::Enter => return Effect::None,
+            KeyCode::Char('e') => {
+                self.mode = Mode::Edit(EditForm::new(people, form.person));
+                return Effect::None;
+            }
+            KeyCode::Down | KeyCode::Char('j') => form.scroll_by(1),
+            KeyCode::Up | KeyCode::Char('k') => form.scroll_by(-1),
+            KeyCode::PageDown | KeyCode::Char(' ') => form.scroll_by(10),
+            KeyCode::PageUp => form.scroll_by(-10),
+            KeyCode::Home | KeyCode::Char('g') => form.scroll = 0,
+            _ => {}
+        }
+        self.mode = Mode::Show(form);
+        Effect::None
     }
 
     fn open_edit(&mut self, screen: &Screen, people: &People) {

@@ -7,14 +7,14 @@ use unicode_width::UnicodeWidthStr;
 
 use super::app::{App, Mode};
 use super::family;
-use super::forms::{ADD_FIELDS, AddForm, EditForm, SearchForm};
+use super::forms::{ADD_FIELDS, AddForm, EditForm, SearchForm, ShowForm};
 use super::screen::Screen;
 use crate::edit::FIELDS;
 use crate::person::Brief;
 
 const MIN_TEXT: u16 = 8;
 const PADDING: u16 = 1;
-const KEYS: &str = " ? help  ←↓↑→/hjkl move  ⏎ centre  b back  n partner  / find  e edit  c child  p parent  q quit ";
+const KEYS: &str = " ? help  hjkl move  ⏎ centre  s show  b back  n partner  / find  e edit  c child  p parent  q quit ";
 
 pub fn draw(frame: &mut Frame, app: &App, screen: &Screen) {
     let area = frame.area();
@@ -129,6 +129,7 @@ fn draw_overlay(frame: &mut Frame, app: &App) {
         Mode::Browse => {}
         Mode::Help => draw_help(frame),
         Mode::Search(form) => draw_search(frame, form),
+        Mode::Show(form) => draw_show(frame, form),
         Mode::Edit(form) => draw_edit(frame, form),
         Mode::Add(form) => draw_add(frame, form),
     }
@@ -153,9 +154,13 @@ fn popup(frame: &mut Frame, width: u16, height: u16, title: String) -> Rect {
     inner
 }
 
-const HELP: [(&str, &str); 12] = [
+const HELP: [(&str, &str); 13] = [
     ("←↓↑→ / h j k l", "move between people"),
     ("Enter", "put the highlighted person in the centre"),
+    (
+        "s / Enter again",
+        "show all properties of the highlighted person",
+    ),
     ("b / Backspace", "back to the previous person"),
     ("n / Tab", "next partner (changes the children row)"),
     ("/", "find someone by name"),
@@ -213,6 +218,34 @@ fn draw_search(frame: &mut Frame, form: &SearchForm) {
         list,
         &mut state,
     );
+}
+
+fn draw_show(frame: &mut Frame, form: &ShowForm) {
+    let title = format!(" {} — j/k scroll, e edit, Esc close ", form.person.name);
+    let area = frame.area();
+    let width = form
+        .lines
+        .iter()
+        .map(|l| l.width() as u16)
+        .max()
+        .unwrap_or(0)
+        .max(title.width() as u16)
+        + 4;
+    let height = (form.lines.len() as u16 + 2).min(area.height.saturating_sub(4));
+    let inner = popup(
+        frame,
+        width.min(area.width.saturating_sub(4)),
+        height,
+        title,
+    );
+    let lines: Vec<Line> = form
+        .lines
+        .iter()
+        .skip(form.scroll)
+        .take(usize::from(inner.height))
+        .map(|l| Line::from(fit(l, inner.width)))
+        .collect();
+    frame.render_widget(Paragraph::new(lines), inner);
 }
 
 fn draw_edit(frame: &mut Frame, form: &EditForm) {

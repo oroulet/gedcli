@@ -115,6 +115,7 @@ names to 18 columns and warns when it is wider than the terminal (pipe it to
 |---|---|
 | ←↓↑→ / h j k l | move between people |
 | Enter | put the highlighted person in the centre |
+| s / Enter again | show all properties of the highlighted person (read-only) |
 | b / Backspace | back to the previous person |
 | n / Tab | next partner (the children row follows) |
 | / | find someone by name |

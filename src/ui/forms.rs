@@ -62,6 +62,35 @@ impl SearchForm {
     }
 }
 
+pub struct ShowForm {
+    pub person: Brief,
+    pub lines: Vec<String>,
+    pub scroll: usize,
+}
+
+impl ShowForm {
+    pub fn new(people: &People, person: Brief) -> Self {
+        let lines = people
+            .record(&person.id)
+            .map(|record| crate::card::render(&crate::card::build(people, record)))
+            .unwrap_or_default()
+            .lines()
+            .skip(1)
+            .map(str::to_owned)
+            .collect();
+        Self {
+            person,
+            lines,
+            scroll: 0,
+        }
+    }
+
+    pub fn scroll_by(&mut self, step: isize) {
+        let last = self.lines.len().saturating_sub(1);
+        self.scroll = self.scroll.saturating_add_signed(step).min(last);
+    }
+}
+
 pub struct EditForm {
     pub person: Brief,
     pub values: Vec<Option<String>>,
