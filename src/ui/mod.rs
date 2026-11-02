@@ -13,7 +13,32 @@ use crate::person::People;
 use crate::store::Store;
 pub use app::{AddRequest, App, Effect};
 
-pub fn run(store: &mut Store, start: String) -> Result<()> {
+pub fn start(store: &mut Store, query: &str) -> Result<()> {
+    use std::io::IsTerminal;
+    if !(std::io::stdin().is_terminal() && std::io::stdout().is_terminal()) {
+        anyhow::bail!("`gedcli ui` needs a terminal; use show, edit or add from scripts");
+    }
+    let start = starting_person(store, query)?;
+    run(store, start)
+}
+
+fn starting_person(store: &Store, query: &str) -> Result<String> {
+    let people = People::new(&store.doc);
+    if query.trim().is_empty() {
+        return people
+            .individuals()
+            .find_map(|r| r.xref().map(str::to_owned))
+            .context("the file has no people");
+    }
+    let choice = crate::select::Choice {
+        pick: None,
+        interactive: true,
+        json: false,
+    };
+    Ok(crate::select::choose(crate::search::find(&people, query), &choice)?.id)
+}
+
+fn run(store: &mut Store, start: String) -> Result<()> {
     let mut terminal = ratatui::init();
     let result = event_loop(&mut terminal, store, App::new(start));
     ratatui::restore();
