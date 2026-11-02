@@ -407,3 +407,38 @@ fn show_all_prints_every_match() {
         .assert()
         .failure();
 }
+
+#[test]
+fn submitters_claim_links_unlinked_people_to_the_exporter() {
+    let (_dir, file) = workspace();
+    let text = fs::read_to_string(&file)
+        .unwrap()
+        .replacen("1 CHAR UTF-8\r\n", "1 CHAR UTF-8\r\n1 SUBM @S1@\r\n", 1)
+        .replacen("1 RFN geni:111\r\n", "1 RFN geni:111\r\n1 SUBM @S2@\r\n", 1)
+        .replacen(
+            "0 TRLR",
+            "0 @S1@ SUBM\r\n1 NAME Me\r\n0 @S2@ SUBM\r\n1 NAME Other\r\n0 TRLR",
+            1,
+        );
+    fs::write(&file, text).unwrap();
+    gedcli(&file)
+        .args(["submitters", "--claim"])
+        .assert()
+        .failure();
+    let out = stdout(gedcli(&file).args(["submitters", "--claim", "--yes"]));
+    assert!(
+        out.starts_with("3 people without a submitter will be linked to Me @S1@\n"),
+        "{out}"
+    );
+    let saved = fs::read_to_string(&file).unwrap();
+    assert!(saved.contains("1 NAME Per /Lund/\r\n1 SEX M\r\n1 FAMS @F1@\r\n1 SUBM @S1@\r\n"));
+    assert!(saved.contains("1 SUBM @S2@\r\n") && !saved.contains("1 SUBM @S2@\r\n1 SUBM"));
+    assert_eq!(
+        stdout(gedcli(&file).args(["submitters", "me", "--count"])),
+        "3\tMe\t@S1@\n"
+    );
+    assert_eq!(
+        stdout(gedcli(&file).args(["submitters", "--claim", "--yes"])),
+        "everyone already has a submitter\n"
+    );
+}

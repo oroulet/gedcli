@@ -34,6 +34,7 @@ real changes. gedcli also keeps the file's BOM and CRLF line endings.
     gedcli summary [--format json]            # format, counts, submitters, connections, data quality
     gedcli submitters                         # people entered per submitter account
     gedcli submitters "kari lund" [--count]   # the people one submitter entered
+    gedcli submitters --claim                 # link people without a submitter to the exporter
     gedcli add "kari lund" daughter Liv Berg "12 JUN 1980"
     gedcli add per son Nils - 1955 --with "ase lund"   # pick the family when there are several
     gedcli migrate [--dry-run]                # convert the file in place to GEDCOM 7.0

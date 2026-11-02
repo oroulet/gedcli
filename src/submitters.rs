@@ -100,6 +100,28 @@ fn linked<'a>(doc: &'a Document, tag: &'a str, xref: &'a str) -> impl Iterator<I
         .filter(move |r| submitter_of(r).is_some_and(|s| s.eq_ignore_ascii_case(xref)))
 }
 
+/// Gives every person without a submitter an explicit `SUBM` link to the file's exporter.
+pub fn claim_unlinked(doc: &mut Document) -> anyhow::Result<(String, Vec<String>)> {
+    let Some(exporter) = exporter(doc) else {
+        anyhow::bail!("the header names no submitter (HEAD.SUBM) to claim people for");
+    };
+    let mut claimed = Vec::new();
+    for record in doc.records.iter_mut().filter(|r| r.tag() == "INDI") {
+        if submitter_of(record).is_none() {
+            let at = record
+                .children
+                .iter()
+                .position(|n| n.tag() == "CHAN")
+                .unwrap_or(record.children.len());
+            record
+                .children
+                .insert(at, Node::with_value("SUBM", &exporter));
+            claimed.push(record.xref().unwrap_or_default().to_owned());
+        }
+    }
+    Ok((exporter, claimed))
+}
+
 fn unlinked<'a>(doc: &'a Document, tag: &'a str) -> impl Iterator<Item = &'a Node> {
     doc.records_of(tag).filter(|r| submitter_of(r).is_none())
 }

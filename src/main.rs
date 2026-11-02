@@ -175,6 +175,12 @@ enum Command {
         /// Only print the number of people
         #[arg(long)]
         count: bool,
+        /// Link every person without a submitter to the file's exporter (HEAD.SUBM)
+        #[arg(long, conflicts_with_all = ["query", "count"])]
+        claim: bool,
+        /// Write the claim without asking
+        #[arg(long, short, requires = "claim")]
+        yes: bool,
         #[arg(long, value_enum)]
         format: Option<Format>,
     },
@@ -286,9 +292,13 @@ fn run(cli: Cli) -> Result<()> {
         Command::Compare { other, format } => print_compare(&store, other, format),
         Command::Summary { format } => print_summary(&store, format),
         Command::Submitters {
+            claim: true, yes, ..
+        } => claim_unlinked(&mut store, yes),
+        Command::Submitters {
             query,
             count,
             format,
+            ..
         } => print_submitters(&store, &query, count, format),
         Command::Migrate { dry_run } => migrate::migrate(&mut store, dry_run),
         Command::Export { version, output } => migrate::export(&store, &version, &output),
@@ -302,6 +312,32 @@ fn print_summary(store: &Store, format: Option<Format>) -> Result<()> {
     } else {
         print!("{}", summary::render(&summary));
     }
+    Ok(())
+}
+
+fn claim_unlinked(store: &mut Store, yes: bool) -> Result<()> {
+    let mut doc = store.doc.clone();
+    let (exporter, claimed) = submitters::claim_unlinked(&mut doc)?;
+    if claimed.is_empty() {
+        println!("everyone already has a submitter");
+        return Ok(());
+    }
+    let name = submitters::name_of(&doc, &exporter);
+    println!(
+        "{} people without a submitter will be linked to {name} {exporter}",
+        claimed.len()
+    );
+    if !yes && !confirm(on_terminal())? {
+        println!("not written");
+        return Ok(());
+    }
+    store.doc = doc;
+    store.save()?;
+    println!(
+        "claimed {} people, wrote {}",
+        claimed.len(),
+        store.path.display()
+    );
     Ok(())
 }
 
