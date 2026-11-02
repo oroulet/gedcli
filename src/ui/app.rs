@@ -83,7 +83,7 @@ impl App {
 
     fn browse_key(&mut self, key: KeyEvent, screen: &Screen, people: &People) -> Effect {
         match key.code {
-            KeyCode::Char('q') | KeyCode::Esc => self.quit = true,
+            KeyCode::Char('q') => self.quit = true,
             KeyCode::Char('?') => self.mode = Mode::Help,
             KeyCode::Char('h') | KeyCode::Left => self.move_sideways(screen, -1),
             KeyCode::Char('l') | KeyCode::Right => self.move_sideways(screen, 1),

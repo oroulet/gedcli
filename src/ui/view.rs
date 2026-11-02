@@ -168,7 +168,7 @@ const HELP: [(&str, &str); 13] = [
     ("c", "add a child to the highlighted person"),
     ("p", "add a parent to the highlighted person"),
     ("?", "this help"),
-    ("q / Esc / Ctrl-C", "quit"),
+    ("q / Ctrl-C", "quit (Esc only closes pop-ups)"),
     ("", ""),
     ("", "every change is saved to the file at once"),
 ];

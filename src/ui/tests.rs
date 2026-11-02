@@ -304,3 +304,20 @@ fn show_lists_all_properties_read_only() {
     );
     assert_eq!(std::fs::read(&store.path).unwrap(), before);
 }
+
+#[test]
+fn esc_closes_pop_ups_but_never_quits() {
+    let (_dir, mut store) = fixture_store();
+    let mut app = App::new("@I3@".to_owned());
+    for opener in ['e', 'c', 'p', 's', '/', '?'] {
+        press(&mut app, &mut store, KeyCode::Char(opener));
+        assert!(!matches!(app.mode, Mode::Browse), "{opener} opened nothing");
+        press(&mut app, &mut store, KeyCode::Esc);
+        assert!(
+            matches!(app.mode, Mode::Browse),
+            "Esc did not close {opener}"
+        );
+    }
+    press(&mut app, &mut store, KeyCode::Esc);
+    assert!(!app.quit);
+}
