@@ -132,7 +132,31 @@ fn draw_overlay(frame: &mut Frame, app: &App) {
         Mode::Show(form) => draw_show(frame, form),
         Mode::Edit(form) => draw_edit(frame, form),
         Mode::Add(form) => draw_add(frame, form),
+        Mode::ConfirmQuit(previous) => {
+            draw_overlay_mode(frame, previous);
+            draw_confirm_quit(frame);
+        }
     }
+}
+
+fn draw_overlay_mode(frame: &mut Frame, mode: &Mode) {
+    match mode {
+        Mode::Help => draw_help(frame),
+        Mode::Search(form) => draw_search(frame, form),
+        Mode::Show(form) => draw_show(frame, form),
+        Mode::Edit(form) => draw_edit(frame, form),
+        Mode::Add(form) => draw_add(frame, form),
+        Mode::Browse | Mode::ConfirmQuit(_) => {}
+    }
+}
+
+fn draw_confirm_quit(frame: &mut Frame) {
+    let inner = popup(frame, 34, 3, " quit ".to_owned());
+    let text = Line::from(vec![
+        Span::raw(" Quit gedcli? "),
+        Span::styled("[Y/n]", Style::new().add_modifier(Modifier::BOLD)),
+    ]);
+    frame.render_widget(Paragraph::new(text), inner);
 }
 
 fn popup(frame: &mut Frame, width: u16, height: u16, title: String) -> Rect {
@@ -168,7 +192,7 @@ const HELP: [(&str, &str); 13] = [
     ("c", "add a child to the highlighted person"),
     ("p", "add a parent to the highlighted person"),
     ("?", "this help"),
-    ("q / Ctrl-C", "quit (Esc only closes pop-ups)"),
+    ("q / Ctrl-C", "quit, after a Y/n question (Enter = yes)"),
     ("", ""),
     ("", "every change is saved to the file at once"),
 ];

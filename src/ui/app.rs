@@ -13,6 +13,8 @@ pub enum Mode {
     Show(ShowForm),
     Edit(EditForm),
     Add(AddForm),
+    /// Asking "quit?"; keeps the mode to return to on "no".
+    ConfirmQuit(Box<Mode>),
 }
 
 pub enum Effect {
@@ -66,8 +68,12 @@ impl App {
     }
 
     pub fn key(&mut self, key: KeyEvent, people: &People) -> Effect {
+        if let Mode::ConfirmQuit(_) = self.mode {
+            self.confirm_quit_key(key);
+            return Effect::None;
+        }
         if is_ctrl_c(key) {
-            self.quit = true;
+            self.ask_to_quit();
             return Effect::None;
         }
         let screen = self.screen(people);
@@ -78,12 +84,16 @@ impl App {
             Mode::Search(form) => self.search_key(key, form, people),
             Mode::Edit(form) => self.edit_key(key, form),
             Mode::Add(form) => self.add_key(key, form),
+            confirm @ Mode::ConfirmQuit(_) => {
+                self.mode = confirm;
+                Effect::None
+            }
         }
     }
 
     fn browse_key(&mut self, key: KeyEvent, screen: &Screen, people: &People) -> Effect {
         match key.code {
-            KeyCode::Char('q') => self.quit = true,
+            KeyCode::Char('q') => self.ask_to_quit(),
             KeyCode::Char('?') => self.mode = Mode::Help,
             KeyCode::Char('h') | KeyCode::Left => self.move_sideways(screen, -1),
             KeyCode::Char('l') | KeyCode::Right => self.move_sideways(screen, 1),
@@ -199,6 +209,23 @@ impl App {
                 self.partner_index + 1,
                 screen.partners.len()
             );
+        }
+    }
+
+    fn ask_to_quit(&mut self) {
+        let previous = std::mem::replace(&mut self.mode, Mode::Browse);
+        self.mode = Mode::ConfirmQuit(Box::new(previous));
+    }
+
+    fn confirm_quit_key(&mut self, key: KeyEvent) {
+        let Mode::ConfirmQuit(previous) = std::mem::replace(&mut self.mode, Mode::Browse) else {
+            return;
+        };
+        match key.code {
+            KeyCode::Char('y' | 'Y') | KeyCode::Enter => self.quit = true,
+            _ if is_ctrl_c(key) => self.quit = true,
+            KeyCode::Char('n' | 'N') | KeyCode::Esc => self.mode = *previous,
+            _ => self.mode = Mode::ConfirmQuit(previous),
         }
     }
 

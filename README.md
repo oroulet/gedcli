@@ -120,7 +120,7 @@ Piped output never has colours. For a top-down view of a family, use `gedcli ui`
 | e | edit the highlighted person's fields |
 | c / p | add a child / a parent to the highlighted person |
 | ? | help |
-| q / Ctrl-C | quit (Esc only closes pop-ups) |
+| q / Ctrl-C | quit, after a Y/n question (Enter = yes); Esc only closes pop-ups |
 
 Every edit or addition is saved to the file at once, with the same checks as
 `edit` and `add`. If saving fails, the change is undone in memory too.

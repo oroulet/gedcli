@@ -190,17 +190,36 @@ fn next_partner_switches_the_children_row() {
 }
 
 #[test]
-fn ctrl_c_quits_from_any_mode() {
+fn quitting_asks_first_and_defaults_to_yes() {
     let (_dir, mut store) = fixture_store();
     let ctrl_c = KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL);
+    let people_key = |app: &mut App, store: &Store, key: KeyEvent| {
+        let people = People::new(&store.doc);
+        app.key(key, &people);
+    };
+    let mut app = App::new("@I3@".to_owned());
+    press(&mut app, &mut store, KeyCode::Char('q'));
+    assert!(!app.quit && matches!(app.mode, Mode::ConfirmQuit(_)));
+    press(&mut app, &mut store, KeyCode::Char('n'));
+    assert!(!app.quit && matches!(app.mode, Mode::Browse));
+    press(&mut app, &mut store, KeyCode::Char('q'));
+    press(&mut app, &mut store, KeyCode::Enter);
+    assert!(app.quit, "Enter is yes");
     for opener in [None, Some('e'), Some('c'), Some('/')] {
         let mut app = App::new("@I3@".to_owned());
         if let Some(key) = opener {
             press(&mut app, &mut store, KeyCode::Char(key));
         }
-        let people = People::new(&store.doc);
-        app.key(ctrl_c, &people);
-        assert!(app.quit, "Ctrl-C did not quit after {opener:?}");
+        people_key(&mut app, &store, ctrl_c);
+        assert!(!app.quit, "Ctrl-C asks first after {opener:?}");
+        press(&mut app, &mut store, KeyCode::Esc);
+        assert!(
+            !app.quit && !matches!(app.mode, Mode::ConfirmQuit(_)),
+            "Esc returns after {opener:?}"
+        );
+        people_key(&mut app, &store, ctrl_c);
+        people_key(&mut app, &store, ctrl_c);
+        assert!(app.quit, "Ctrl-C twice quits after {opener:?}");
     }
 }
 
