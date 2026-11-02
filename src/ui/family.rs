@@ -12,6 +12,9 @@ use super::view::{box_height, box_width, dim, draw_box, main_lines, person_lines
 
 const MARRIAGE: &str = " ⚭ ";
 const MAX_TEXT: u16 = 22;
+const MAX_MAIN_TEXT: u16 = 60;
+const SIBLING_GAP: u16 = 3;
+const ARROW_ROOM: u16 = 3;
 const UP: u8 = 1;
 const DOWN: u8 = 2;
 const LEFT: u8 = 4;
@@ -100,34 +103,38 @@ fn row_plan(area: Rect, app: &App, screen: &Screen, row: usize) -> RowPlan {
     } else {
         people.iter().map(|p| person_lines(p, MAX_TEXT)).collect()
     };
-    let gap = if row == CENTER {
-        MARRIAGE.width() as u16
-    } else {
-        1
+    let focus = (app.focus.0 == row).then(|| app.focus_index(screen));
+    let widest_gap = if row == CENTER { SIBLING_GAP } else { 1 };
+    let (start, end) = match visible_window(&boxes, area.width, focus, widest_gap) {
+        (0, end) if end == boxes.len() => (0, end),
+        _ => visible_window(
+            &boxes,
+            area.width.saturating_sub(2 * ARROW_ROOM),
+            focus,
+            widest_gap,
+        ),
     };
-    let focus = (app.focus.0 == row).then_some(app.focus.1);
-    let (start, end) = if row == CENTER {
-        (0, boxes.len())
-    } else {
-        visible_window(&boxes, area.width, focus)
-    };
+    let gaps: Vec<u16> = (start..end)
+        .map(|i| gap_before(row, i, start, screen))
+        .collect();
     let widths: Vec<u16> = boxes[start..end].iter().map(|b| box_width(b)).collect();
-    let total = widths.iter().sum::<u16>() + gap * widths.len().saturating_sub(1) as u16;
+    let total = widths.iter().sum::<u16>() + gaps.iter().sum::<u16>();
     let mut x = area.x + area.width.saturating_sub(total) / 2;
     let items: Vec<Item> = boxes
         .into_iter()
         .enumerate()
         .skip(start)
         .take(end - start)
-        .zip(widths)
-        .map(|((index, lines), width)| {
+        .zip(widths.into_iter().zip(gaps))
+        .map(|((index, lines), (width, gap))| {
+            x += gap;
             let rect = Rect {
                 x,
                 y: 0,
                 width: width.min(area.right().saturating_sub(x)),
                 height: box_height(&lines),
             };
-            x += width + gap;
+            x += width;
             Item { index, rect, lines }
         })
         .collect();
@@ -142,15 +149,47 @@ fn row_plan(area: Rect, app: &App, screen: &Screen, row: usize) -> RowPlan {
     }
 }
 
+fn gap_before(row: usize, index: usize, start: usize, screen: &Screen) -> u16 {
+    if index == start {
+        return 0;
+    }
+    if row != CENTER {
+        return 1;
+    }
+    let couple_edge = index == screen.center_pos
+        || index - 1 == screen.center_pos
+        || Some(index - 1) == screen.partner_pos;
+    if Some(index) == screen.partner_pos {
+        MARRIAGE.width() as u16
+    } else if couple_edge {
+        SIBLING_GAP
+    } else {
+        1
+    }
+}
+
 fn center_boxes(area: Rect, screen: &Screen) -> Vec<Vec<Line<'static>>> {
-    let partner = screen.rows[CENTER]
-        .get(1)
-        .map(|p| person_lines(p, MAX_TEXT));
-    let partner_space = partner
-        .as_ref()
-        .map_or(0, |p| box_width(p) + MARRIAGE.width() as u16);
-    let main = main_lines(screen, area.width.saturating_sub(partner_space + 4));
-    std::iter::once(main).chain(partner).collect()
+    let partner_space = screen
+        .partner_pos
+        .and_then(|i| screen.rows[CENTER].get(i))
+        .map_or(0, |p| {
+            box_width(&person_lines(p, MAX_TEXT)) + MARRIAGE.width() as u16
+        });
+    let main_width = area
+        .width
+        .saturating_sub(partner_space + 4)
+        .min(MAX_MAIN_TEXT);
+    screen.rows[CENTER]
+        .iter()
+        .enumerate()
+        .map(|(i, person)| {
+            if i == screen.center_pos {
+                main_lines(screen, main_width)
+            } else {
+                person_lines(person, MAX_TEXT)
+            }
+        })
+        .collect()
 }
 
 fn band(groups: &[Group], upper: &RowPlan, lower: &RowPlan, index: usize) -> Band {
@@ -227,11 +266,14 @@ fn draw_row(frame: &mut Frame, area: Rect, app: &App, screen: &Screen, row: &Row
             frame,
             item.rect,
             item.lines.clone(),
-            app.focus == (row.row, item.index),
+            app.is_focused(row.row, item.index, screen),
         );
     }
     if row.row == CENTER
-        && let Some(partner) = row.items.get(1)
+        && let Some(partner) = row
+            .items
+            .iter()
+            .find(|i| Some(i.index) == screen.partner_pos)
     {
         let mark = Rect {
             x: partner.rect.x - MARRIAGE.width() as u16,
@@ -247,29 +289,32 @@ fn draw_row(frame: &mut Frame, area: Rect, app: &App, screen: &Screen, row: &Row
 fn draw_label(frame: &mut Frame, area: Rect, screen: &Screen, row: &RowPlan) {
     let first = row.items[0].rect.x;
     let last = row.items.last().map_or(first, |i| i.rect.right());
-    let mut text = label(row.row, screen);
-    if row.hidden_before > 0 {
-        text = format!("◀ {} more · {text}", row.hidden_before);
-    }
+    let text = label(row.row, screen);
     let room = first.saturating_sub(area.x + 1);
     if !text.is_empty() && (text.width() as u16) < room {
-        let rect = Rect {
-            x: area.x + 1,
-            y: row.y,
-            width: room,
-            height: 1,
-        };
-        frame.render_widget(Paragraph::new(Span::styled(text, dim())), rect);
+        put(frame, area.x + 1, row.y, room, &text);
+    }
+    let middle = row.y + row.height / 2;
+    if row.hidden_before > 0 {
+        let more = format!("◀{}", row.hidden_before);
+        put(frame, area.x, middle, first.saturating_sub(area.x), &more);
     }
     if row.hidden_after > 0 {
-        let more = format!(" {} more ▶", row.hidden_after);
+        let more = format!("{}▶", row.hidden_after);
+        let x = area.right().saturating_sub(more.width() as u16).max(last);
+        put(frame, x, middle, area.right().saturating_sub(x), &more);
+    }
+}
+
+fn put(frame: &mut Frame, x: u16, y: u16, width: u16, text: &str) {
+    if width > 0 {
         let rect = Rect {
-            x: last,
-            y: row.y,
-            width: area.right().saturating_sub(last),
+            x,
+            y,
+            width,
             height: 1,
         };
-        frame.render_widget(Paragraph::new(Span::styled(more, dim())), rect);
+        frame.render_widget(Paragraph::new(Span::styled(text.to_owned(), dim())), rect);
     }
 }
 

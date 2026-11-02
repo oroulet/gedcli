@@ -151,7 +151,7 @@ fn preview_real_file() {
         .split('x')
         .map(|n| n.parse().unwrap())
         .collect();
-    app.focus = (super::screen::CENTER, 0);
+    app.focus = (super::screen::CENTER, None);
     println!("{}", render_to_text(&store, &mut app, size[0], size[1]));
 }
 
@@ -239,4 +239,42 @@ fn grandchildren_hang_under_their_own_parent() {
         links.contains(&(owned(&["Liv Lund"]), owned(&["Nils Lund"]))),
         "{links:?}"
     );
+}
+
+#[test]
+fn siblings_sit_beside_the_person_and_link_to_the_parents() {
+    let (_dir, mut store) = fixture_store();
+    let request = AddRequest {
+        anchor: "@I3@".to_owned(),
+        relation: crate::add::Relation::Brother,
+        family: None,
+        given: "Nils".to_owned(),
+        surname: "Lund".to_owned(),
+        birth: "1955".to_owned(),
+        death: String::new(),
+    };
+    apply(&mut store, Effect::Add(request)).unwrap();
+    let mut app = App::new("@I3@".to_owned());
+    let people = People::new(&store.doc);
+    let screen = app.screen(&people);
+    let row: Vec<&str> = screen.rows[screen::CENTER]
+        .iter()
+        .map(|b| b.name.as_str())
+        .collect();
+    assert_eq!(row, ["Kari Lund", "Nils Lund"]);
+    assert_eq!(screen.center_pos, 0);
+    let area = ratatui::layout::Rect::new(0, 0, 100, 30);
+    app.visible = family::visible_rows(area, &app, &screen);
+    let parents_to_row: Vec<_> = family::drawn_links(area, &app, &screen)
+        .into_iter()
+        .filter(|(upper, ..)| *upper == screen::PARENTS)
+        .collect();
+    assert_eq!(
+        parents_to_row,
+        [(screen::PARENTS, screen::CENTER, vec![0, 1], vec![0, 1])]
+    );
+    drop(people);
+    press(&mut app, &mut store, KeyCode::Char('l'));
+    press(&mut app, &mut store, KeyCode::Enter);
+    assert_eq!(app.center, "@IG1@");
 }

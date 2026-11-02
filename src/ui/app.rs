@@ -37,7 +37,8 @@ pub struct AddRequest {
 pub struct App {
     pub center: String,
     pub partner_index: usize,
-    pub focus: (usize, usize),
+    /// The highlighted row and person; `None` means the centre person.
+    pub focus: (usize, Option<String>),
     pub mode: Mode,
     pub status: String,
     pub visible: [bool; ROWS],
@@ -50,7 +51,7 @@ impl App {
         Self {
             center,
             partner_index: 0,
-            focus: (CENTER, 0),
+            focus: (CENTER, None),
             mode: Mode::Browse,
             status: String::new(),
             visible: [true; ROWS],
@@ -100,20 +101,43 @@ impl App {
 
     pub fn focused<'a>(&self, screen: &'a Screen) -> &'a Brief {
         screen
-            .at(self.focus.0, self.focus.1)
+            .at(self.focus.0, self.focus_index(screen))
             .unwrap_or_else(|| screen.center())
     }
 
+    /// Where the highlighted person sits in their row.
+    pub fn focus_index(&self, screen: &Screen) -> usize {
+        let row = &screen.rows[self.focus.0];
+        let found = self
+            .focus
+            .1
+            .as_deref()
+            .and_then(|id| row.iter().position(|b| b.id.eq_ignore_ascii_case(id)));
+        found.unwrap_or(if self.focus.0 == CENTER {
+            screen.center_pos
+        } else {
+            0
+        })
+    }
+
+    pub fn is_focused(&self, row: usize, index: usize, screen: &Screen) -> bool {
+        self.focus.0 == row && self.focus_index(screen) == index
+    }
+
+    fn focus_on(&mut self, screen: &Screen, row: usize, index: usize) {
+        self.focus = (row, screen.at(row, index).map(|b| b.id.clone()));
+    }
+
     fn move_sideways(&mut self, screen: &Screen, step: isize) {
-        let len = screen.rows[self.focus.0].len();
-        let col = self.focus.1.saturating_add_signed(step);
-        if col < len {
-            self.focus.1 = col;
+        let row = self.focus.0;
+        let col = self.focus_index(screen).saturating_add_signed(step);
+        if col < screen.rows[row].len() {
+            self.focus_on(screen, row, col);
         }
     }
 
     fn move_vertically(&mut self, screen: &Screen, step: isize) {
-        let (row, col) = self.focus;
+        let (row, col) = (self.focus.0, self.focus_index(screen));
         let mut target = row;
         loop {
             match target.checked_add_signed(step).filter(|&r| r < ROWS) {
@@ -126,7 +150,12 @@ impl App {
         }
         let from = screen.rows[row].len().max(1);
         let to = screen.rows[target].len();
-        self.focus = (target, (col * to / from).min(to - 1));
+        let col = if target == CENTER {
+            screen.center_pos
+        } else {
+            (col * to / from).min(to - 1)
+        };
+        self.focus_on(screen, target, col);
     }
 
     fn recenter_on_focus(&mut self, screen: &Screen) {
@@ -152,15 +181,13 @@ impl App {
 
     fn reset_view(&mut self) {
         self.partner_index = 0;
-        self.focus = (CENTER, 0);
+        self.focus = (CENTER, None);
     }
 
     fn next_partner(&mut self, screen: &Screen) {
         if screen.partners.len() > 1 {
             self.partner_index = (screen.partner_index + 1) % screen.partners.len();
-            if self.focus.0 != CENTER {
-                self.focus = (CENTER, 0);
-            }
+            self.focus = (CENTER, None);
             self.status = format!(
                 "partner {}/{}",
                 self.partner_index + 1,

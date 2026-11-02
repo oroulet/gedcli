@@ -25,6 +25,15 @@ pub struct Screen {
     pub details: Vec<String>,
     pub partners: Vec<Partner>,
     pub partner_index: usize,
+    pub center_pos: usize,
+    pub partner_pos: Option<usize>,
+}
+
+struct CenterRow {
+    people: Vec<Brief>,
+    center_pos: usize,
+    partner_pos: Option<usize>,
+    parent_links: Vec<Group>,
 }
 
 impl Screen {
@@ -44,21 +53,24 @@ impl Screen {
         };
         let children = current_children(people, center, partner_index);
         let parents = people.parents(center);
-        let mut center_row = vec![people.brief(center)];
-        center_row.extend(partners.get(partner_index).and_then(|p| p.person.clone()));
+        let partner = partners.get(partner_index).and_then(|p| p.person.clone());
+        let row = center_row(people, center, partner, &parents);
+        let couple: Vec<usize> = std::iter::once(row.center_pos)
+            .chain(row.partner_pos)
+            .collect();
         let (grandparents, grandparent_links) = grandparents(people, &parents);
         let (grandchildren, grandchild_links) = grandchildren(people, &children);
         let links = [
             grandparent_links,
-            one_group(parents.len(), 1),
-            one_group(center_row.len(), children.len()),
+            row.parent_links,
+            couple_group(couple, children.len()),
             grandchild_links,
         ];
         Self {
             rows: [
                 grandparents,
                 briefs(people, &parents),
-                center_row,
+                row.people,
                 briefs(people, &children),
                 grandchildren,
             ],
@@ -66,11 +78,13 @@ impl Screen {
             details: details(people, center),
             partners,
             partner_index,
+            center_pos: row.center_pos,
+            partner_pos: row.partner_pos,
         }
     }
 
     pub fn center(&self) -> &Brief {
-        &self.rows[CENTER][0]
+        &self.rows[CENTER][self.center_pos]
     }
 
     pub fn partner(&self) -> Option<&Partner> {
@@ -95,14 +109,112 @@ fn current_children(people: &People, center: &str, partner_index: usize) -> Vec<
         .unwrap_or_default()
 }
 
-fn one_group(upper: usize, lower: usize) -> Vec<Group> {
-    if upper == 0 || lower == 0 {
+fn couple_group(upper: Vec<usize>, lower: usize) -> Vec<Group> {
+    if lower == 0 {
         return Vec::new();
     }
     vec![Group {
-        upper: (0..upper).collect(),
+        upper,
         lower: (0..lower).collect(),
     }]
+}
+
+/// Older siblings, the person, their partner, then younger siblings; linked to their parents by family.
+fn center_row(
+    people: &People,
+    center: &str,
+    partner: Option<Brief>,
+    parents: &[String],
+) -> CenterRow {
+    let families = birth_families(people, center);
+    let own_birth = people.birth_key(center);
+    let mut siblings: Vec<(String, String)> = Vec::new();
+    for family in &families {
+        for child in people
+            .graph
+            .family(family)
+            .map(|m| m.children.clone())
+            .unwrap_or_default()
+        {
+            let known = siblings
+                .iter()
+                .any(|(_, id)| id.eq_ignore_ascii_case(&child));
+            if !known && !child.eq_ignore_ascii_case(center) {
+                siblings.push((family.clone(), child));
+            }
+        }
+    }
+    siblings.sort_by_key(|(_, id)| people.birth_key(id));
+    let (older, younger): (Vec<_>, Vec<_>) = siblings
+        .into_iter()
+        .partition(|(_, id)| people.birth_key(id) < own_birth);
+    let mut ids: Vec<(Option<String>, String)> =
+        older.into_iter().map(|(f, id)| (Some(f), id)).collect();
+    let center_pos = ids.len();
+    ids.push((None, center.to_owned()));
+    let mut people_row: Vec<Brief> = Vec::new();
+    let partner_pos = partner.as_ref().map(|_| center_pos + 1);
+    ids.extend(younger.into_iter().map(|(f, id)| (Some(f), id)));
+    for (index, (_, id)) in ids.iter().enumerate() {
+        people_row.push(people.brief(id));
+        if index == center_pos {
+            people_row.extend(partner.clone());
+        }
+    }
+    let position = |i: usize| {
+        if partner_pos.is_some() && i > center_pos {
+            i + 1
+        } else {
+            i
+        }
+    };
+    let parent_links = families
+        .iter()
+        .filter_map(|family| {
+            let members = people.graph.family(family)?;
+            let upper: Vec<usize> = parents
+                .iter()
+                .enumerate()
+                .filter(|(_, p)| members.partners.iter().any(|m| m.eq_ignore_ascii_case(p)))
+                .map(|(i, _)| i)
+                .collect();
+            let lower: Vec<usize> = ids
+                .iter()
+                .enumerate()
+                .filter(|(_, (f, _))| f.as_deref().is_none_or(|f| f == family))
+                .map(|(i, _)| position(i))
+                .collect();
+            (!upper.is_empty()).then_some(Group { upper, lower })
+        })
+        .collect();
+    CenterRow {
+        people: people_row,
+        center_pos,
+        partner_pos,
+        parent_links,
+    }
+}
+
+fn birth_families(people: &People, person: &str) -> Vec<String> {
+    let mut families: Vec<String> = people
+        .record(person)
+        .map(|r| {
+            r.all("FAMC")
+                .filter_map(|n| n.pointer().map(str::to_owned))
+                .collect()
+        })
+        .unwrap_or_default();
+    let mut extra: Vec<String> = people
+        .graph
+        .families()
+        .iter()
+        .filter(|(_, m)| m.children.iter().any(|c| c.eq_ignore_ascii_case(person)))
+        .map(|(key, _)| key.clone())
+        .filter(|key| !families.iter().any(|f| f.eq_ignore_ascii_case(key)))
+        .collect();
+    extra.sort();
+    families.extend(extra);
+    families
 }
 
 fn grandparents(people: &People, parents: &[String]) -> (Vec<Brief>, Vec<Group>) {

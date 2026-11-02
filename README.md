@@ -102,10 +102,14 @@ names to 18 columns and warns when it is wider than the terminal (pipe it to
 
 `gedcli ui [name]` opens a full-screen view centred on one person:
 
-- Their partner sits beside them, parents above, and children of that
-  partnership below.
+- Their partner sits beside them, with older siblings to the left and younger
+  ones to the right. Parents are above and the children of that partnership
+  below.
+- Lines connect parents to their children, so you can see whose children the
+  grandchildren are.
 - On a tall terminal, grandparents and grandchildren appear too.
-- Rows with more people than fit scroll sideways as you move.
+- Rows with more people than fit scroll sideways as you move; ◀3 / 4▶ show
+  how many are hidden.
 
 | Keys | Does |
 |---|---|

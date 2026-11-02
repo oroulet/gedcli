@@ -14,7 +14,6 @@ use crate::person::Brief;
 
 const MIN_TEXT: u16 = 8;
 const PADDING: u16 = 1;
-const GAP: u16 = 1;
 const KEYS: &str = " ? help  ←↓↑→/hjkl move  ⏎ centre  b back  n partner  / find  e edit  c child  p parent  q quit ";
 
 pub fn draw(frame: &mut Frame, app: &App, screen: &Screen) {
@@ -29,12 +28,13 @@ pub(super) fn visible_window(
     boxes: &[Vec<Line>],
     width: u16,
     focus: Option<usize>,
+    gap: u16,
 ) -> (usize, usize) {
     let fits_from = |start: usize| {
         let mut used = 0;
         let mut end = start;
         while end < boxes.len() {
-            let next = used + box_width(&boxes[end]) + if end > start { GAP } else { 0 };
+            let next = used + box_width(&boxes[end]) + if end > start { gap } else { 0 };
             if next > width && end > start {
                 break;
             }
