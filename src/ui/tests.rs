@@ -153,6 +153,12 @@ fn preview_real_file() {
         .map(|n| n.parse().unwrap())
         .collect();
     app.focus = (super::screen::CENTER, None);
+    if let Ok(keys) = std::env::var("GEDCLI_PREVIEW_KEYS") {
+        let people = People::new(&store.doc);
+        for c in keys.chars() {
+            app.key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE), &people);
+        }
+    }
     println!("{}", render_to_text(&store, &mut app, size[0], size[1]));
 }
 

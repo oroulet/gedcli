@@ -285,5 +285,6 @@ fn details(people: &People, center: &str) -> Vec<String> {
             .iter()
             .map(|c| format!("{:<11}{c}", "Contact")),
     );
+    lines.extend(card.added_by.map(|by| format!("{:<11}{by}", "Added by")));
     lines
 }

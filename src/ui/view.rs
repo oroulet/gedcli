@@ -253,8 +253,20 @@ fn draw_edit(frame: &mut Frame, form: &EditForm) {
         " edit {} — ↑↓ field, Enter change, Esc close ",
         form.person.name
     );
-    let inner = popup(frame, 76, FIELDS.len() as u16 + 6, title);
-    let [list, input] = Layout::vertical([Constraint::Min(0), Constraint::Length(3)]).areas(inner);
+    let about_height = form.about.len() as u16;
+    let inner = popup(frame, 76, FIELDS.len() as u16 + 7 + about_height, title);
+    let [list, about, input] = Layout::vertical([
+        Constraint::Min(0),
+        Constraint::Length(about_height + 1),
+        Constraint::Length(3),
+    ])
+    .areas(inner);
+    let about_text: Vec<Line> = form
+        .about
+        .iter()
+        .map(|l| Line::from(format!("  {l}")))
+        .collect();
+    frame.render_widget(Paragraph::new(about_text).style(dim()), about);
     let items: Vec<ListItem> = FIELDS
         .iter()
         .zip(&form.values)

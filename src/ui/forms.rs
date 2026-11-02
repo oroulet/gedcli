@@ -93,6 +93,7 @@ impl ShowForm {
 
 pub struct EditForm {
     pub person: Brief,
+    pub about: Vec<String>,
     pub values: Vec<Option<String>>,
     pub selected: usize,
     pub input: Option<Input>,
@@ -101,12 +102,14 @@ pub struct EditForm {
 impl EditForm {
     pub fn new(people: &People, person: Brief) -> Self {
         let record = people.record(&person.id);
+        let about = record.map(|r| about(people, r)).unwrap_or_default();
         let values = FIELDS
             .iter()
             .map(|&f| record.and_then(|r| edit::get(r, f)))
             .collect();
         Self {
             person,
+            about,
             values,
             selected: 0,
             input: None,
@@ -116,6 +119,14 @@ impl EditForm {
     pub fn field(&self) -> Field {
         FIELDS[self.selected]
     }
+}
+
+fn about(people: &People, record: &gedcomkit::Node) -> Vec<String> {
+    let card = crate::card::build(people, record);
+    [("added by", card.added_by), ("changed", card.changed)]
+        .into_iter()
+        .filter_map(|(label, value)| value.map(|v| format!("{label} {v}")))
+        .collect()
 }
 
 pub const ADD_FIELDS: [&str; 5] = ["relation", "first name", "surname", "birth", "death"];
