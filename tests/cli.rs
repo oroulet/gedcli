@@ -140,16 +140,6 @@ fn count_ancestors_per_generation() {
 }
 
 #[test]
-fn ancestor_chart_has_root_at_bottom() {
-    let (_dir, file) = workspace();
-    let out = stdout(gedcli(&file).args(["show", "ola", "--parents", "--format", "chart"]));
-    assert_eq!(
-        out,
-        "          Åse Lund\nPer Lund  b. 1920\n    └────┬────┘\n         │\n     Kari Lund\n      b. 1950\n         │\n         │\n     Ola Berg\n"
-    );
-}
-
-#[test]
 fn submitters_count_unlinked_people_for_exporter() {
     let (_dir, file) = workspace();
     let text = fs::read_to_string(&file).unwrap();

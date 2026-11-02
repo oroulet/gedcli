@@ -9,14 +9,13 @@ use crate::relatives::Rel;
 #[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum Format {
     Tree,
-    Chart,
     List,
     Json,
 }
 
 impl Format {
     pub fn is_visual(self) -> bool {
-        matches!(self, Self::Tree | Self::Chart)
+        self == Self::Tree
     }
 }
 

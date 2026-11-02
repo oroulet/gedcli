@@ -1,6 +1,5 @@
 mod add;
 mod card;
-mod chart;
 mod check;
 mod compare;
 mod count;
@@ -656,7 +655,6 @@ fn print_shown(persons: &[Brief], shown: Vec<Shown>, all: bool, format: Format) 
         return Ok(());
     }
     let text = texts.join("\n");
-    warn_if_too_wide(&text, format);
     print!("{text}");
     Ok(())
 }
@@ -686,11 +684,6 @@ fn show_one(people: &People, person: &Brief, wanted: &Relatives, format: Format)
             return Ok(Shown::Json(
                 json!({ "person": person, "ancestors": ancestors, "descendants": descendants }),
             ));
-        }
-        Format::Chart => {
-            let up = ancestors.as_ref().map(chart::ancestors);
-            let down = descendants.as_ref().map(chart::descendants);
-            [up, down].into_iter().flatten().collect()
         }
         Format::Tree => [ancestors, descendants]
             .iter()
@@ -731,25 +724,6 @@ fn show_counts(
                 .join("\n"),
         ),
     })
-}
-
-fn warn_if_too_wide(text: &str, format: Format) {
-    if format != Format::Chart {
-        return;
-    }
-    let Some((_, columns)) = console::Term::stdout().size_checked() else {
-        return;
-    };
-    let widest = text
-        .lines()
-        .map(console::measure_text_width)
-        .max()
-        .unwrap_or(0);
-    if widest > usize::from(columns) {
-        eprintln!(
-            "note: chart is {widest} columns wide, terminal has {columns}; use fewer generations or pipe to `less -S`"
-        );
-    }
 }
 
 fn show_card(people: &People, person: &Brief, format: Format) -> Result<Shown> {

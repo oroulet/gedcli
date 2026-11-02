@@ -20,9 +20,8 @@ real changes. gedcli also keeps the file's BOM and CRLF line endings.
     gedcli show lund --all                    # every match, one after the other, no picker
     gedcli show lund --children               # descendants, 10 generations, as a tree
     gedcli show ola --parents 3               # ancestors, 3 generations
-    gedcli show ola --parents --format list|json|tree|chart
+    gedcli show ola --parents --format list|json|tree
     gedcli show ola --parents --count         # ancestors per generation: found / possible / % complete
-    gedcli show ase --children 3 --format chart   # top-down chart (ancestors: root at the bottom)
     gedcli ui kari lund                       # full-screen browser: navigate, edit, add
     gedcli edit kari                          # interactive: pick field, type value, confirm
     gedcli edit kari --set birth.place=Bergen --set "birth.date=ABT 1950" --yes
@@ -90,13 +89,12 @@ people plus the people with no submitter, and lists the two groups separately.
 
 ## Readability
 
-Trees, charts, HTML, `list` and `json` show a short `info` next to each
+Trees, the UI, HTML, `list` and `json` show a short `info` next to each
 person: their occupation, or else a short one-line note (at most 50 characters,
 with Geni's `{geni:about_me}` prefix removed and source references skipped).
 
-On a terminal, `tree` colours names by sex (blue male, pink female, white unknown) and dims dates. It leaves out xrefs unless you pass `--ids`; `list` and `json` always include them. `chart` wraps
-names to 18 columns and warns when it is wider than the terminal (pipe it to
-`less -S`, or ask for fewer generations). Piped output never has colours.
+On a terminal, `tree` colours names by sex (blue male, pink female, white unknown) and dims dates. It leaves out xrefs unless you pass `--ids`; `list` and `json` always include them.
+Piped output never has colours. For a top-down view of a family, use `gedcli ui`.
 
 ## Terminal UI
 
