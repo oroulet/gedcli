@@ -145,3 +145,17 @@ or sister. Use `-` for no surname or to skip the birth date.
 
 GPL-3.0-or-later, as required by the [gedcomkit](https://crates.io/crates/gedcomkit)
 dependency. See [LICENSE](LICENSE).
+
+## Releasing
+
+    # bump `version` in Cargo.toml, then:
+    cargo test && cargo clippy --all-targets -- -D warnings
+    git commit -am "chore: release X.Y.Z"
+    cargo publish --target-dir target/publish --dry-run
+    cargo publish --target-dir target/publish
+    git tag vX.Y.Z && git push && git push --tags
+
+Keep `--target-dir target/publish`. Without it, the build cargo runs to verify
+the package shares `target/` with normal builds. It records the packaged copy's
+sources there, so later `cargo build`s consider gedcli up to date and keep a
+stale binary until `cargo clean -p gedcli`.
