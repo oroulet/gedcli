@@ -122,8 +122,12 @@ Piped output never has colours. For a top-down view of a family, use `gedcli ui`
 | ? | help |
 | q / Ctrl-C | quit, after a Y/n question (Enter = yes); Esc only closes pop-ups |
 
-Every edit or addition is saved to the file at once, with the same checks as
-`edit` and `add`. If saving fails, the change is undone in memory too.
+In the edit pop-up, each field you change is checked right away and marked
+`*`, but nothing is written until you press `w` (or choose "write changes").
+Then all of them are saved together with one change date. `Esc` with
+unsaved edits asks before discarding them. Additions (`c`, `p`) are saved at once.
+Both use the same checks as `edit` and `add`, and if saving fails the change is
+undone in memory too.
 
 ## Adding people
 

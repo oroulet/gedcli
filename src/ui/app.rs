@@ -1,9 +1,11 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use super::forms::{ADD_FIELDS, AddForm, EditForm, SearchForm, ShowForm};
+use super::forms::{
+    ADD_FIELDS, AddForm, DISCARD_ROW, EDIT_ROWS, EditForm, SearchForm, ShowForm, WRITE_ROW,
+};
 use super::screen::{CENTER, ROWS, Screen};
 use crate::add::Relation;
-use crate::edit::{FIELDS, Field};
+use crate::edit::Field;
 use crate::person::{Brief, People};
 
 pub enum Mode {
@@ -19,10 +21,11 @@ pub enum Mode {
 
 pub enum Effect {
     None,
-    Edit {
+    /// Store the edited copy of a person, with the changes made to it.
+    Write {
         person: String,
-        field: Field,
-        value: String,
+        record: gedcomkit::Node,
+        changes: Vec<crate::edit::Change>,
     },
     Add(AddRequest),
 }
@@ -304,38 +307,56 @@ impl App {
     }
 
     fn edit_key(&mut self, key: KeyEvent, mut form: EditForm) -> Effect {
-        if let Some(mut input) = form.input.take() {
+        if form.input.is_some() {
+            self.edit_input_key(key, &mut form);
+        } else if form.confirm_discard {
+            if matches!(key.code, KeyCode::Char('y' | 'Y')) {
+                return Effect::None;
+            }
+            form.confirm_discard = false;
+        } else {
             match key.code {
-                KeyCode::Esc => {}
-                KeyCode::Enter => {
-                    return Effect::Edit {
-                        person: form.person.id.clone(),
-                        field: form.field(),
-                        value: input.text,
-                    };
+                KeyCode::Esc | KeyCode::Char('q') if form.changes.is_empty() => {
+                    return Effect::None;
                 }
-                _ => {
-                    input.key(key);
-                    form.input = Some(input);
+                KeyCode::Esc | KeyCode::Char('q') => form.confirm_discard = true,
+                KeyCode::Char('w') => return write(form),
+                KeyCode::Down | KeyCode::Char('j') => {
+                    form.selected = (form.selected + 1).min(EDIT_ROWS - 1)
                 }
+                KeyCode::Up | KeyCode::Char('k') => form.selected = form.selected.saturating_sub(1),
+                KeyCode::Enter if form.selected == WRITE_ROW => return write(form),
+                KeyCode::Enter if form.selected == DISCARD_ROW => return Effect::None,
+                KeyCode::Enter => match open_field(&form) {
+                    Ok(input) => form.input = Some(input),
+                    Err(message) => form.error = Some(message),
+                },
+                _ => {}
             }
-            self.mode = Mode::Edit(form);
-            return Effect::None;
-        }
-        match key.code {
-            KeyCode::Esc | KeyCode::Char('q') => return Effect::None,
-            KeyCode::Down | KeyCode::Char('j') => {
-                form.selected = (form.selected + 1).min(FIELDS.len() - 1)
-            }
-            KeyCode::Up | KeyCode::Char('k') => form.selected = form.selected.saturating_sub(1),
-            KeyCode::Enter => match open_field(&form) {
-                Ok(input) => form.input = Some(input),
-                Err(message) => self.status = message,
-            },
-            _ => {}
         }
         self.mode = Mode::Edit(form);
         Effect::None
+    }
+
+    fn edit_input_key(&mut self, key: KeyEvent, form: &mut EditForm) {
+        let Some(mut input) = form.input.take() else {
+            return;
+        };
+        let Some(field) = form.field() else { return };
+        match key.code {
+            KeyCode::Esc => form.error = None,
+            KeyCode::Enter => match form.apply(field, &input.text) {
+                Ok(()) => form.error = None,
+                Err(err) => {
+                    form.error = Some(format!("{err:#}"));
+                    form.input = Some(input);
+                }
+            },
+            _ => {
+                input.key(key);
+                form.input = Some(input);
+            }
+        }
     }
 
     fn add_key(&mut self, key: KeyEvent, mut form: AddForm) -> Effect {
@@ -366,9 +387,20 @@ fn is_ctrl_c(key: KeyEvent) -> bool {
     key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL)
 }
 
+fn write(form: EditForm) -> Effect {
+    if form.changes.is_empty() {
+        return Effect::None;
+    }
+    Effect::Write {
+        person: form.person.id,
+        record: form.record,
+        changes: form.changes,
+    }
+}
+
 fn open_field(form: &EditForm) -> Result<super::forms::Input, String> {
     let current = form.values[form.selected].clone().unwrap_or_default();
-    if form.field() == Field::Note && current.contains('\n') {
+    if form.field() == Some(Field::Note) && current.contains('\n') {
         return Err("multi-line note: edit it with `gedcli edit --set note=…`".to_owned());
     }
     Ok(super::forms::Input::with(&current))

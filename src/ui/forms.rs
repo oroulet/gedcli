@@ -91,34 +91,67 @@ impl ShowForm {
     }
 }
 
+/// Rows after the fields in the edit list.
+pub const WRITE_ROW: usize = FIELDS.len();
+pub const DISCARD_ROW: usize = FIELDS.len() + 1;
+pub const EDIT_ROWS: usize = FIELDS.len() + 2;
+
 pub struct EditForm {
     pub person: Brief,
     pub about: Vec<String>,
+    pub record: gedcomkit::Node,
     pub values: Vec<Option<String>>,
+    pub changes: Vec<edit::Change>,
     pub selected: usize,
     pub input: Option<Input>,
+    pub error: Option<String>,
+    pub confirm_discard: bool,
+    v7: bool,
 }
 
 impl EditForm {
     pub fn new(people: &People, person: Brief) -> Self {
-        let record = people.record(&person.id);
-        let about = record.map(|r| about(people, r)).unwrap_or_default();
-        let values = FIELDS
-            .iter()
-            .map(|&f| record.and_then(|r| edit::get(r, f)))
-            .collect();
+        let record = people
+            .record(&person.id)
+            .cloned()
+            .unwrap_or_else(|| gedcomkit::Node::new("INDI"));
+        let about = about(people, &record);
+        let values = values_of(&record);
         Self {
             person,
             about,
+            record,
             values,
+            changes: Vec::new(),
             selected: 0,
             input: None,
+            error: None,
+            confirm_discard: false,
+            v7: people.doc.is_version_7_or_later(),
         }
     }
 
-    pub fn field(&self) -> Field {
-        FIELDS[self.selected]
+    pub fn field(&self) -> Option<Field> {
+        FIELDS.get(self.selected).copied()
     }
+
+    pub fn is_changed(&self, field: Field) -> bool {
+        self.changes.iter().any(|c| c.field == field)
+    }
+
+    /// Applies one field to the working copy; nothing is written yet.
+    pub fn apply(&mut self, field: Field, text: &str) -> anyhow::Result<()> {
+        let mut record = self.record.clone();
+        let change = edit::apply(&mut record, field, text, self.v7)?;
+        self.record = record;
+        edit::merge(&mut self.changes, change);
+        self.values = values_of(&self.record);
+        Ok(())
+    }
+}
+
+fn values_of(record: &gedcomkit::Node) -> Vec<Option<String>> {
+    FIELDS.iter().map(|&f| edit::get(record, f)).collect()
 }
 
 fn about(people: &People, record: &gedcomkit::Node) -> Vec<String> {

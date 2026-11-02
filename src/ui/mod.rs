@@ -78,32 +78,42 @@ fn event_loop(
 pub fn apply(store: &mut Store, effect: Effect) -> Result<String> {
     match effect {
         Effect::None => Ok(String::new()),
-        Effect::Edit {
+        Effect::Write {
             person,
-            field,
-            value,
-        } => apply_edit(store, &person, field, &value),
+            record,
+            changes,
+        } => apply_write(store, &person, record, &changes),
         Effect::Add(request) => apply_add(store, &request),
     }
 }
 
-fn apply_edit(store: &mut Store, person: &str, field: edit::Field, value: &str) -> Result<String> {
-    let mut record = store.doc.record(person).context("record vanished")?.clone();
-    let change = edit::apply(&mut record, field, value, store.is_v7())?;
-    if change.before == change.after {
-        return Ok("no change".to_owned());
-    }
+fn apply_write(
+    store: &mut Store,
+    person: &str,
+    mut record: gedcomkit::Node,
+    changes: &[edit::Change],
+) -> Result<String> {
     edit::touch(&mut record);
     save_changed(store, |doc| {
-        *doc.record_mut(person).expect("record exists") = record;
+        *doc.record_mut(person).context("record vanished")? = record;
         Ok(())
     })?;
     let shown = |v: &Option<String>| v.clone().unwrap_or_else(|| "—".to_owned());
+    let summary: Vec<String> = changes
+        .iter()
+        .map(|c| {
+            format!(
+                "{} {} → {}",
+                c.field.key(),
+                shown(&c.before),
+                shown(&c.after)
+            )
+        })
+        .collect();
     Ok(format!(
-        "saved {}: {} → {}",
-        field.key(),
-        shown(&change.before),
-        shown(&change.after)
+        "saved {} change(s): {}",
+        changes.len(),
+        summary.join("; ")
     ))
 }
 

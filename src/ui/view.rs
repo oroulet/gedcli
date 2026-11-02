@@ -7,7 +7,7 @@ use unicode_width::UnicodeWidthStr;
 
 use super::app::{App, Mode};
 use super::family;
-use super::forms::{ADD_FIELDS, AddForm, EditForm, SearchForm, ShowForm};
+use super::forms::{ADD_FIELDS, AddForm, EDIT_ROWS, EditForm, SearchForm, ShowForm, WRITE_ROW};
 use super::screen::Screen;
 use crate::edit::FIELDS;
 use crate::person::Brief;
@@ -137,7 +137,7 @@ fn draw_overlay(frame: &mut Frame, app: &App) {
         Mode::Add(form) => draw_add(frame, form),
         Mode::ConfirmQuit(previous) => {
             draw_overlay_mode(frame, previous);
-            draw_confirm_quit(frame);
+            draw_confirm_quit(frame, previous);
         }
     }
 }
@@ -153,13 +153,23 @@ fn draw_overlay_mode(frame: &mut Frame, mode: &Mode) {
     }
 }
 
-fn draw_confirm_quit(frame: &mut Frame) {
-    let inner = popup(frame, 34, 3, " quit ".to_owned());
-    let text = Line::from(vec![
+fn draw_confirm_quit(frame: &mut Frame, previous: &Mode) {
+    let unsaved = match previous {
+        Mode::Edit(form) => form.changes.len(),
+        _ => 0,
+    };
+    let mut lines = vec![Line::from(vec![
         Span::raw(" Quit gedcli? "),
         Span::styled("[Y/n]", Style::new().add_modifier(Modifier::BOLD)),
-    ]);
-    frame.render_widget(Paragraph::new(text), inner);
+    ])];
+    if unsaved > 0 {
+        lines.push(Line::from(Span::styled(
+            format!(" {unsaved} unsaved edit(s) will be lost"),
+            Style::new().fg(Color::Yellow),
+        )));
+    }
+    let inner = popup(frame, 40, lines.len() as u16 + 2, " quit ".to_owned());
+    frame.render_widget(Paragraph::new(lines), inner);
 }
 
 fn popup(frame: &mut Frame, width: u16, height: u16, title: String) -> Rect {
@@ -197,7 +207,7 @@ const HELP: [(&str, &str); 13] = [
     ("?", "this help"),
     ("q / Ctrl-C", "quit, after a Y/n question (Enter = yes)"),
     ("", ""),
-    ("", "every change is saved to the file at once"),
+    ("", "edits are written with w; additions are saved at once"),
 ];
 
 fn draw_help(frame: &mut Frame) {
@@ -277,12 +287,12 @@ fn draw_show(frame: &mut Frame, form: &ShowForm) {
 
 fn draw_edit(frame: &mut Frame, form: &EditForm) {
     let title = format!(
-        " edit {} — ↑↓ field, Enter change, Esc close ",
+        " edit {} — ↑↓ field, Enter change, w write, Esc close ",
         form.person.name
     );
     let about_height = form.about.len() as u16;
-    let inner = popup(frame, 76, FIELDS.len() as u16 + 7 + about_height, title);
-    let [list, about, input] = Layout::vertical([
+    let inner = popup(frame, 78, EDIT_ROWS as u16 + 8 + about_height, title);
+    let [list, about, hint] = Layout::vertical([
         Constraint::Min(0),
         Constraint::Length(about_height + 1),
         Constraint::Length(3),
@@ -294,30 +304,65 @@ fn draw_edit(frame: &mut Frame, form: &EditForm) {
         .map(|l| Line::from(format!("  {l}")))
         .collect();
     frame.render_widget(Paragraph::new(about_text).style(dim()), about);
-    let items: Vec<ListItem> = FIELDS
-        .iter()
-        .zip(&form.values)
-        .map(|(field, value)| {
-            ListItem::new(format!("{:<14}{}", field.key(), preview(value.as_deref())))
-        })
-        .collect();
     let mut state = ListState::default().with_selected(Some(form.selected));
     frame.render_stateful_widget(
-        List::new(items)
+        List::new(edit_rows(form))
             .highlight_style(focus_style())
             .highlight_symbol("▶ "),
         list,
         &mut state,
     );
-    let hint = match &form.input {
-        Some(input) => format!(
-            "{} = {}▏\nEnter saves · empty removes · Esc cancels",
-            form.field().key(),
-            input.text
-        ),
-        None => "dates: 12 JUN 1950, ABT 1900, BET 1900 AND 1910 · sex: M, F, U".to_owned(),
-    };
-    frame.render_widget(Paragraph::new(hint).style(dim()), input);
+    frame.render_widget(Paragraph::new(edit_hint(form)), hint);
+}
+
+fn edit_rows(form: &EditForm) -> Vec<ListItem<'static>> {
+    let mut rows: Vec<ListItem> = FIELDS
+        .iter()
+        .zip(&form.values)
+        .map(|(&field, value)| {
+            let mark = if form.is_changed(field) { "*" } else { " " };
+            let text = format!("{mark}{:<14}{}", field.key(), preview(value.as_deref()));
+            let style = if form.is_changed(field) {
+                Style::new().add_modifier(Modifier::BOLD)
+            } else {
+                Style::new()
+            };
+            ListItem::new(Line::from(Span::styled(text, style)))
+        })
+        .collect();
+    let pending = form.changes.len();
+    rows.push(ListItem::new(""));
+    rows[WRITE_ROW] = ListItem::new(format!(" ✔ write {pending} change(s)"));
+    rows.push(ListItem::new(" ✘ discard and close"));
+    rows
+}
+
+fn edit_hint(form: &EditForm) -> Vec<Line<'static>> {
+    let mut lines = Vec::new();
+    if form.confirm_discard {
+        lines.push(Line::from(Span::styled(
+            format!("Discard {} unsaved change(s)? y/N", form.changes.len()),
+            Style::new().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+        )));
+    } else if let (Some(input), Some(field)) = (&form.input, form.field()) {
+        lines.push(Line::from(format!("{} = {}▏", field.key(), input.text)));
+        lines.push(Line::from(Span::styled(
+            "Enter keeps it (not written yet) · empty removes · Esc cancels",
+            dim(),
+        )));
+    } else {
+        lines.push(Line::from(Span::styled(
+            "dates: 12 JUN 1950, ABT 1900, BET 1900 AND 1910 · sex: M, F, U",
+            dim(),
+        )));
+    }
+    if let Some(error) = &form.error {
+        lines.push(Line::from(Span::styled(
+            error.clone(),
+            Style::new().fg(Color::Red),
+        )));
+    }
+    lines
 }
 
 fn draw_add(frame: &mut Frame, form: &AddForm) {

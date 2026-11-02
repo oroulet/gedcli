@@ -74,8 +74,9 @@ fn moves_up_recenters_and_goes_back() {
 }
 
 #[test]
-fn editing_a_field_saves_the_file() {
+fn edits_stay_in_the_form_until_written() {
     let (_dir, mut store) = fixture_store();
+    let before = std::fs::read(&store.path).unwrap();
     let mut app = App::new("@I3@".to_owned());
     press(&mut app, &mut store, KeyCode::Char('e'));
     for _ in 0..4 {
@@ -83,10 +84,88 @@ fn editing_a_field_saves_the_file() {
     }
     press(&mut app, &mut store, KeyCode::Enter);
     type_text(&mut app, &mut store, "Bergen");
-    let status = press(&mut app, &mut store, KeyCode::Enter);
-    assert_eq!(status, "saved birth.place: — → Bergen");
+    press(&mut app, &mut store, KeyCode::Enter);
+    assert!(
+        matches!(app.mode, Mode::Edit(_)),
+        "still editing after one field"
+    );
+    for _ in 0..5 {
+        press(&mut app, &mut store, KeyCode::Down);
+    }
+    press(&mut app, &mut store, KeyCode::Enter);
+    type_text(&mut app, &mut store, "nurse");
+    press(&mut app, &mut store, KeyCode::Enter);
+    assert_eq!(
+        std::fs::read(&store.path).unwrap(),
+        before,
+        "nothing written before w"
+    );
+    let status = press(&mut app, &mut store, KeyCode::Char('w'));
+    assert!(
+        status.starts_with("saved 2 change(s): birth.place — → Bergen; occupation — → nurse"),
+        "{status}"
+    );
+    assert!(matches!(app.mode, Mode::Browse));
     let saved = std::fs::read_to_string(&store.path).unwrap();
-    assert!(saved.contains("2 DATE 1950\r\n2 PLAC Bergen\r\n"));
+    assert!(
+        saved.contains("2 DATE 1950\r\n2 PLAC Bergen\r\n") && saved.contains("1 OCCU nurse\r\n")
+    );
+    assert_eq!(
+        saved.matches("1 CHAN\r\n").count(),
+        1,
+        "one change stamp for one write"
+    );
+}
+
+#[test]
+fn a_bad_value_keeps_the_input_open() {
+    let (_dir, mut store) = fixture_store();
+    let mut app = App::new("@I3@".to_owned());
+    press(&mut app, &mut store, KeyCode::Char('e'));
+    for _ in 0..3 {
+        press(&mut app, &mut store, KeyCode::Down);
+    }
+    press(&mut app, &mut store, KeyCode::Enter);
+    press(&mut app, &mut store, KeyCode::Char('u'));
+    let ctrl_u = KeyEvent::new(KeyCode::Char('u'), KeyModifiers::CONTROL);
+    let people = People::new(&store.doc);
+    app.key(ctrl_u, &people);
+    drop(people);
+    type_text(&mut app, &mut store, "sometime");
+    press(&mut app, &mut store, KeyCode::Enter);
+    let Mode::Edit(form) = &app.mode else {
+        panic!("left the edit form")
+    };
+    assert!(
+        form.input.is_some()
+            && form
+                .error
+                .as_deref()
+                .is_some_and(|e| e.contains("cannot read date"))
+    );
+    assert!(form.changes.is_empty());
+}
+
+#[test]
+fn esc_with_unsaved_edits_asks_before_discarding() {
+    let (_dir, mut store) = fixture_store();
+    let before = std::fs::read(&store.path).unwrap();
+    let mut app = App::new("@I3@".to_owned());
+    press(&mut app, &mut store, KeyCode::Char('e'));
+    press(&mut app, &mut store, KeyCode::Enter);
+    type_text(&mut app, &mut store, "x");
+    press(&mut app, &mut store, KeyCode::Enter);
+    press(&mut app, &mut store, KeyCode::Esc);
+    let Mode::Edit(form) = &app.mode else {
+        panic!("Esc discarded without asking")
+    };
+    assert!(form.confirm_discard);
+    press(&mut app, &mut store, KeyCode::Char('n'));
+    assert!(matches!(&app.mode, Mode::Edit(f) if !f.confirm_discard && f.changes.len() == 1));
+    press(&mut app, &mut store, KeyCode::Esc);
+    press(&mut app, &mut store, KeyCode::Char('y'));
+    assert!(matches!(app.mode, Mode::Browse));
+    assert_eq!(std::fs::read(&store.path).unwrap(), before);
 }
 
 #[test]
@@ -349,7 +428,6 @@ fn esc_closes_pop_ups_but_never_quits() {
 
 #[test]
 fn centre_details_show_occupation_and_notes_but_not_submitter() {
-    let (_dir, _) = fixture_store();
     let dir = tempfile::TempDir::new().unwrap();
     let path = dir.path().join("family.ged");
     let text = std::fs::read_to_string("tests/family.ged").unwrap().replacen(

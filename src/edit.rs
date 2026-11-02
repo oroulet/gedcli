@@ -86,7 +86,7 @@ pub fn field_keys() -> String {
     FIELDS.map(Field::key).join(", ")
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Change {
     pub field: Field,
     pub before: Option<String>,
@@ -184,7 +184,7 @@ fn preview(value: Option<String>) -> String {
     }
 }
 
-fn merge(changes: &mut Vec<Change>, change: Change) {
+pub fn merge(changes: &mut Vec<Change>, change: Change) {
     match changes.iter_mut().find(|c| c.field == change.field) {
         Some(existing) => existing.after = change.after,
         None => changes.push(change),
