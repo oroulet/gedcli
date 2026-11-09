@@ -118,7 +118,10 @@ The view:
   below.
 - Lines connect parents to their children, so you can see whose children the
   grandchildren are.
-- On a tall terminal, grandparents and grandchildren appear too.
+- When there is room, grandparents and grandchildren appear too, and on a tall
+  terminal great-grandparents and great-grandchildren as well.
+- Where lines of two families cross, the vertical line passes through (│);
+  ┼ only appears where one family's lines meet.
 - Rows with more people than fit scroll sideways as you move; ◀3 / 4▶ show
   how many are hidden.
 

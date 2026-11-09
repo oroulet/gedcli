@@ -7,7 +7,10 @@ use ratatui::widgets::Paragraph;
 use unicode_width::UnicodeWidthStr;
 
 use super::app::App;
-use super::screen::{CENTER, CHILDREN, GRANDCHILDREN, GRANDPARENTS, Group, PARENTS, ROWS, Screen};
+use super::screen::{
+    CENTER, CHILDREN, GRANDCHILDREN, GRANDPARENTS, GREAT_GRANDCHILDREN, GREAT_GRANDPARENTS, Group,
+    PARENTS, ROWS, Screen,
+};
 use super::view::{box_height, box_width, dim, draw_box, main_lines, person_lines, visible_window};
 
 const MARRIAGE: &str = " ⚭ ";
@@ -48,12 +51,23 @@ pub struct Plan {
     pub height: u16,
 }
 
+/// Parents, person and children always; then grandparents, grandchildren and the
+/// great-grand rows, each only when it has people, fits, and its neighbour is shown.
 pub fn visible_rows(area: Rect, app: &App, screen: &Screen) -> [bool; ROWS] {
-    let mut visible = [false, true, true, true, false];
-    for row in [GRANDPARENTS, GRANDCHILDREN] {
+    let mut visible = [false; ROWS];
+    for row in [PARENTS, CENTER, CHILDREN] {
+        visible[row] = true;
+    }
+    let extras = [
+        (GRANDPARENTS, PARENTS),
+        (GRANDCHILDREN, CHILDREN),
+        (GREAT_GRANDPARENTS, GRANDPARENTS),
+        (GREAT_GRANDCHILDREN, GRANDCHILDREN),
+    ];
+    for (row, neighbour) in extras {
         let mut trial = visible;
-        trial[row] = !screen.rows[row].is_empty();
-        if plan(area, app, screen, trial).height <= area.height {
+        trial[row] = visible[neighbour] && !screen.rows[row].is_empty();
+        if trial[row] && plan(area, app, screen, trial).height <= area.height {
             visible = trial;
         }
     }
@@ -320,6 +334,7 @@ fn put(frame: &mut Frame, x: u16, y: u16, width: u16, text: &str) {
 
 fn label(row: usize, screen: &Screen) -> String {
     match row {
+        GREAT_GRANDPARENTS => "great-grandparents".to_owned(),
         GRANDPARENTS => "grandparents".to_owned(),
         PARENTS => "parents".to_owned(),
         CENTER if screen.partners.len() > 1 => format!(
@@ -337,19 +352,23 @@ fn label(row: usize, screen: &Screen) -> String {
             None => "children".to_owned(),
         },
         GRANDCHILDREN => "grandchildren".to_owned(),
+        GREAT_GRANDCHILDREN => "great-grandchildren".to_owned(),
         _ => String::new(),
     }
 }
 
 #[derive(Default)]
 struct Connectors {
-    cells: HashMap<(u16, u16), u8>,
+    /// Line directions per cell, kept per family group so crossings can be told from junctions.
+    cells: HashMap<(u16, u16), HashMap<usize, u8>>,
     joints: Vec<(u16, u16, bool)>,
+    group: usize,
 }
 
 impl Connectors {
     fn band(&mut self, band: &Band, upper: &RowPlan, lower: &RowPlan) {
         for (ups, downs, lane) in &band.lanes {
+            self.group += 1;
             let y = band.y + lane;
             let mut xs = Vec::new();
             for &i in ups {
@@ -377,7 +396,12 @@ impl Connectors {
     }
 
     fn mark(&mut self, x: u16, y: u16, flag: u8) {
-        *self.cells.entry((x, y)).or_default() |= flag;
+        *self
+            .cells
+            .entry((x, y))
+            .or_default()
+            .entry(self.group)
+            .or_default() |= flag;
     }
 
     fn vertical(&mut self, x: u16, from: u16, to: u16) {
@@ -397,9 +421,11 @@ impl Connectors {
     fn render(&self, frame: &mut Frame) {
         let area = frame.area();
         let buffer = frame.buffer_mut();
-        for (&(x, y), &flags) in &self.cells {
+        for (&(x, y), groups) in &self.cells {
             if x < area.right() && y < area.bottom() {
-                buffer[(x, y)].set_symbol(glyph(flags)).set_style(dim());
+                buffer[(x, y)]
+                    .set_symbol(cell_glyph(groups))
+                    .set_style(dim());
             }
         }
         for &(x, y, below) in &self.joints {
@@ -416,6 +442,19 @@ impl Connectors {
             }
         }
     }
+}
+
+/// One family's lines merge into junctions; a vertical line of one family crossing
+/// another family's horizontal line is drawn as a bridge (│), not a junction.
+fn cell_glyph(groups: &HashMap<usize, u8>) -> &'static str {
+    let vertical = UP | DOWN;
+    let crossing = groups.len() > 1
+        && groups.values().any(|&f| f & vertical == f)
+        && groups.values().any(|&f| f & vertical == 0);
+    if crossing {
+        return "│";
+    }
+    glyph(groups.values().fold(0, |all, &f| all | f))
 }
 
 fn glyph(flags: u8) -> &'static str {
@@ -455,4 +494,19 @@ pub fn drawn_links(
             })
         })
         .collect()
+}
+
+#[cfg(test)]
+mod glyph_tests {
+    use super::*;
+
+    #[test]
+    fn crossing_of_two_families_is_a_bridge_but_one_family_joins() {
+        let crossing = HashMap::from([(1, UP | DOWN), (2, LEFT | RIGHT)]);
+        assert_eq!(cell_glyph(&crossing), "│");
+        let junction = HashMap::from([(1, UP | DOWN | LEFT | RIGHT)]);
+        assert_eq!(cell_glyph(&junction), "┼");
+        let tee = HashMap::from([(1, LEFT | RIGHT), (2, DOWN | LEFT)]);
+        assert_eq!(cell_glyph(&tee), "┬");
+    }
 }

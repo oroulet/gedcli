@@ -496,3 +496,36 @@ fn search_results_show_relation_and_recent_people() {
     assert!(form.is_recent());
     assert_eq!(form.labels, ["Kari Lund (b. 1950) — mother"]);
 }
+
+#[test]
+fn great_grandchildren_show_when_there_is_room() {
+    let (_dir, mut store) = fixture_store();
+    let request = AddRequest {
+        anchor: "@I4@".to_owned(),
+        relation: crate::add::Relation::Daughter,
+        family: None,
+        given: "Mia".to_owned(),
+        surname: "Berg".to_owned(),
+        birth: "2010".to_owned(),
+        death: String::new(),
+    };
+    apply(&mut store, Effect::Add(request)).unwrap();
+    let mut app = App::new("@I1@".to_owned());
+    let people = People::new(&store.doc);
+    let screen = app.screen(&people);
+    let tall = ratatui::layout::Rect::new(0, 0, 100, 60);
+    app.visible = family::visible_rows(tall, &app, &screen);
+    assert!(app.visible[screen::GREAT_GRANDCHILDREN]);
+    let links = family::drawn_links(tall, &app, &screen);
+    assert!(
+        links.contains(&(
+            screen::GRANDCHILDREN,
+            screen::GREAT_GRANDCHILDREN,
+            vec![0],
+            vec![0]
+        )),
+        "{links:?}"
+    );
+    let short = ratatui::layout::Rect::new(0, 0, 100, 20);
+    assert!(!family::visible_rows(short, &app, &screen)[screen::GREAT_GRANDCHILDREN]);
+}

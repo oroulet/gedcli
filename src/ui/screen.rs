@@ -1,12 +1,14 @@
 use crate::card;
 use crate::person::{Brief, People};
 
-pub const GRANDPARENTS: usize = 0;
-pub const PARENTS: usize = 1;
-pub const CENTER: usize = 2;
-pub const CHILDREN: usize = 3;
-pub const GRANDCHILDREN: usize = 4;
-pub const ROWS: usize = 5;
+pub const GREAT_GRANDPARENTS: usize = 0;
+pub const GRANDPARENTS: usize = 1;
+pub const PARENTS: usize = 2;
+pub const CENTER: usize = 3;
+pub const CHILDREN: usize = 4;
+pub const GRANDCHILDREN: usize = 5;
+pub const GREAT_GRANDCHILDREN: usize = 6;
+pub const ROWS: usize = 7;
 
 pub struct Partner {
     pub family: String,
@@ -58,21 +60,29 @@ impl Screen {
         let couple: Vec<usize> = std::iter::once(row.center_pos)
             .chain(row.partner_pos)
             .collect();
-        let (grandparents, grandparent_links) = grandparents(people, &parents);
-        let (grandchildren, grandchild_links) = grandchildren(people, &children);
+        let (grandparents, grandparent_links) = parents_row(people, &parents);
+        let (great_grandparents, great_grandparent_links) =
+            parents_row(people, &ids(&grandparents));
+        let (grandchildren, grandchild_links) = children_row(people, &children);
+        let (great_grandchildren, great_grandchild_links) =
+            children_row(people, &ids(&grandchildren));
         let links = [
+            great_grandparent_links,
             grandparent_links,
             row.parent_links,
             couple_group(couple, children.len()),
             grandchild_links,
+            great_grandchild_links,
         ];
         Self {
             rows: [
+                great_grandparents,
                 grandparents,
                 briefs(people, &parents),
                 row.people,
                 briefs(people, &children),
                 grandchildren,
+                great_grandchildren,
             ],
             links,
             details: details(people, center),
@@ -217,7 +227,12 @@ fn birth_families(people: &People, person: &str) -> Vec<String> {
     families
 }
 
-fn grandparents(people: &People, parents: &[String]) -> (Vec<Brief>, Vec<Group>) {
+fn ids(row: &[Brief]) -> Vec<String> {
+    row.iter().map(|b| b.id.clone()).collect()
+}
+
+/// The parents of each person in a row, linked to their child.
+fn parents_row(people: &People, parents: &[String]) -> (Vec<Brief>, Vec<Group>) {
     let mut row = Vec::new();
     let mut links = Vec::new();
     for (index, parent) in parents.iter().enumerate() {
@@ -234,7 +249,8 @@ fn grandparents(people: &People, parents: &[String]) -> (Vec<Brief>, Vec<Group>)
     (row, links)
 }
 
-fn grandchildren(people: &People, children: &[String]) -> (Vec<Brief>, Vec<Group>) {
+/// The children of each person in a row, linked to their parent.
+fn children_row(people: &People, children: &[String]) -> (Vec<Brief>, Vec<Group>) {
     let mut ids: Vec<String> = Vec::new();
     let mut links = Vec::new();
     for (index, child) in children.iter().enumerate() {
