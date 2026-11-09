@@ -129,7 +129,7 @@ The view:
 | s / Enter again | show all properties of the highlighted person (read-only) |
 | b / Backspace | back to the previous person |
 | n / Tab | next partner (the children row follows) |
-| / | find someone by name |
+| / | find someone by name or id; each result shows how they are related to the centre person, and an empty search lists recently viewed people |
 | e | edit the highlighted person's fields |
 | c / p | add a child / a parent to the highlighted person |
 | ? | help |

@@ -8,6 +8,8 @@ use crate::add::Relation;
 use crate::edit::Field;
 use crate::person::{Brief, People};
 
+const RECENT: usize = 12;
+
 pub enum Mode {
     Browse,
     Help,
@@ -50,6 +52,7 @@ pub struct App {
     pub visible: [bool; ROWS],
     pub quit: bool,
     history: Vec<String>,
+    recent: Vec<String>,
 }
 
 impl App {
@@ -63,6 +66,7 @@ impl App {
             visible: [true; ROWS],
             quit: false,
             history: Vec::new(),
+            recent: Vec::new(),
         }
     }
 
@@ -109,7 +113,9 @@ impl App {
             KeyCode::Char('s') => self.open_show(screen, people),
             KeyCode::Char('b') | KeyCode::Backspace => self.back(),
             KeyCode::Char('n') | KeyCode::Tab => self.next_partner(screen),
-            KeyCode::Char('/') => self.mode = Mode::Search(SearchForm::new()),
+            KeyCode::Char('/') => {
+                self.mode = Mode::Search(SearchForm::new(people, &self.center, &self.recent))
+            }
             KeyCode::Char('e') => self.open_edit(screen, people),
             KeyCode::Char('c') => self.open_add_child(screen, people),
             KeyCode::Char('p') => self.open_add_parent(screen),
@@ -187,8 +193,15 @@ impl App {
             return;
         }
         let previous = std::mem::replace(&mut self.center, person);
+        self.remember_recent(&previous);
         self.history.push(previous);
         self.reset_view();
+    }
+
+    fn remember_recent(&mut self, person: &str) {
+        self.recent.retain(|id| !id.eq_ignore_ascii_case(person));
+        self.recent.insert(0, person.to_owned());
+        self.recent.truncate(RECENT);
     }
 
     fn back(&mut self) {

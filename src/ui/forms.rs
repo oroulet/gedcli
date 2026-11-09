@@ -37,29 +37,64 @@ impl Input {
 pub struct SearchForm {
     pub input: Input,
     pub results: Vec<Brief>,
+    pub labels: Vec<String>,
     pub selected: usize,
+    center: String,
+    recent: Vec<String>,
 }
 
 impl SearchForm {
-    pub fn new() -> Self {
-        Self {
+    pub fn new(people: &People, center: &str, recent: &[String]) -> Self {
+        let mut form = Self {
             input: Input::default(),
             results: Vec::new(),
+            labels: Vec::new(),
             selected: 0,
-        }
+            center: center.to_owned(),
+            recent: recent.to_vec(),
+        };
+        form.refresh(people);
+        form
     }
 
+    /// Shows the people matching the typed text, or the recently centred people when it is empty.
     pub fn refresh(&mut self, people: &People) {
         self.results = if self.input.text.trim().is_empty() {
-            Vec::new()
+            self.recent.iter().map(|id| people.brief(id)).collect()
         } else {
             search::find(people, &self.input.text)
                 .into_iter()
                 .take(SEARCH_RESULTS)
                 .collect()
         };
+        self.labels = self
+            .results
+            .iter()
+            .map(|b| result_label(people, &self.center, b))
+            .collect();
         self.selected = 0;
     }
+
+    pub fn is_recent(&self) -> bool {
+        self.input.text.trim().is_empty()
+    }
+}
+
+fn result_label(people: &People, center: &str, person: &Brief) -> String {
+    let mut label = person.name.clone();
+    if let Some(life) = &person.life {
+        label.push_str(&format!(" ({life})"));
+    }
+    if let Some(info) = &person.info {
+        label.push_str(&format!(" · {info}"));
+    }
+    if !person.id.eq_ignore_ascii_case(center) {
+        let relation = crate::kinship::relate(people, center, &person.id).relation;
+        if relation != "not connected" {
+            label.push_str(&format!(" — {relation}"));
+        }
+    }
+    label
 }
 
 pub struct ShowForm {

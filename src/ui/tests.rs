@@ -477,3 +477,22 @@ fn without_a_name_the_ui_starts_at_the_exporter() {
     let people = People::new(&store.doc);
     assert_eq!(default_person(&store, &people).as_deref(), Some("@I3@"));
 }
+
+#[test]
+fn search_results_show_relation_and_recent_people() {
+    let (_dir, mut store) = fixture_store();
+    let mut app = App::new("@I3@".to_owned());
+    press(&mut app, &mut store, KeyCode::Char('/'));
+    type_text(&mut app, &mut store, "ola");
+    let Mode::Search(form) = &app.mode else {
+        panic!("no search")
+    };
+    assert_eq!(form.labels, ["Ola Berg — son"]);
+    press(&mut app, &mut store, KeyCode::Enter);
+    press(&mut app, &mut store, KeyCode::Char('/'));
+    let Mode::Search(form) = &app.mode else {
+        panic!("no search")
+    };
+    assert!(form.is_recent());
+    assert_eq!(form.labels, ["Kari Lund (b. 1950) — mother"]);
+}

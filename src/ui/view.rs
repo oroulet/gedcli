@@ -200,7 +200,7 @@ const HELP: [(&str, &str); 13] = [
     ),
     ("b / Backspace", "back to the previous person"),
     ("n / Tab", "next partner (changes the children row)"),
-    ("/", "find someone by name"),
+    ("/", "find someone: name or @id@; empty shows recently viewed"),
     ("e", "edit the highlighted person's fields"),
     ("c", "add a child to the highlighted person"),
     ("p", "add a parent to the highlighted person"),
@@ -235,16 +235,24 @@ fn draw_help(frame: &mut Frame) {
 fn draw_search(frame: &mut Frame, form: &SearchForm) {
     let inner = popup(
         frame,
-        70,
+        96,
         18,
         " find — type a name, ↑↓ choose, Enter go, Esc cancel ".to_owned(),
     );
     let [input, list] = Layout::vertical([Constraint::Length(2), Constraint::Min(0)]).areas(inner);
-    frame.render_widget(Paragraph::new(format!("> {}▏", form.input.text)), input);
+    let hint = if form.is_recent() && !form.results.is_empty() {
+        "   recently viewed:"
+    } else {
+        ""
+    };
+    frame.render_widget(
+        Paragraph::new(format!("> {}▏{hint}", form.input.text)),
+        input,
+    );
     let items: Vec<ListItem> = form
-        .results
+        .labels
         .iter()
-        .map(|b| ListItem::new(b.to_string()))
+        .map(|l| ListItem::new(l.clone()))
         .collect();
     let mut state =
         ListState::default().with_selected((!form.results.is_empty()).then_some(form.selected));
