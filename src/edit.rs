@@ -413,7 +413,7 @@ pub(crate) fn set_event_detail(record: &mut Node, tag: &str, sub: &str, value: O
     let index = match (index, value) {
         (Some(i), _) => i,
         (None, Some(_)) => {
-            let at = before_tail(record);
+            let at = event_position(record, tag);
             insert_child(record, Node::new(tag), at)
         }
         (None, None) => return,
@@ -457,6 +457,21 @@ fn after_names(record: &Node) -> usize {
         .iter()
         .rposition(|n| n.tag() == "NAME")
         .map_or(0, |i| i + 1)
+}
+
+const LIFE_ORDER: [&str; 5] = ["BIRT", "CHR", "BAPM", "DEAT", "BURI"];
+
+/// Where a new event goes: before any later life event (a birth before a death), else before the links and change date.
+fn event_position(record: &Node, tag: &str) -> usize {
+    let later: &[&str] = LIFE_ORDER
+        .iter()
+        .position(|t| *t == tag)
+        .map_or(&[], |i| &LIFE_ORDER[i + 1..]);
+    record
+        .children
+        .iter()
+        .position(|n| later.contains(&n.tag()))
+        .unwrap_or_else(|| before_tail(record))
 }
 
 pub(crate) fn before_tail(record: &Node) -> usize {
@@ -567,6 +582,16 @@ mod tests {
         assert_eq!(
             render(&p),
             "0 @I1@ INDI\n1 NAME Ann /Lee/\n1 DEAT\n2 DATE ABT 5 JAN 1950\n1 FAMC @F1@\n"
+        );
+    }
+
+    #[test]
+    fn new_birth_goes_before_an_existing_death() {
+        let mut p = person("0 @I1@ INDI\n1 NAME Ann /Lee/\n1 DEAT\n2 DATE 2026\n1 FAMC @F1@\n");
+        apply(&mut p, Field::BirthDate, "1944", true).unwrap();
+        assert_eq!(
+            render(&p),
+            "0 @I1@ INDI\n1 NAME Ann /Lee/\n1 BIRT\n2 DATE 1944\n1 DEAT\n2 DATE 2026\n1 FAMC @F1@\n"
         );
     }
 
