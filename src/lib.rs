@@ -5,6 +5,7 @@ mod compare;
 mod count;
 mod edit;
 mod fact;
+mod html;
 mod kinship;
 mod marriage;
 mod migrate;
@@ -198,7 +199,7 @@ enum Command {
         #[arg(long, value_enum)]
         format: Option<Format>,
     },
-    /// Write an interactive HTML family tree (zoom, fold branches, search)
+    /// Write a static HTML page: a tree diagram, then every person with all details and notes
     Html {
         #[command(flatten)]
         target: Target,
@@ -557,8 +558,6 @@ fn fix_countries(store: &mut Store, yes: bool) -> Result<()> {
     Ok(())
 }
 
-const TREE_TEMPLATE: &str = include_str!("tree.html");
-
 fn html(
     store: &Store,
     target: &Target,
@@ -569,17 +568,9 @@ fn html(
     let people = People::new(&store.doc);
     let person = find(&people, target, on_terminal(), false)?;
     let parents = parents.or(if children.is_none() { Some(10) } else { None });
-    let data = json!({
-        "ancestors": parents.map(|n| relatives::ancestors(&people, &person.id, n)),
-        "descendants": children.map(|n| relatives::descendants(&people, &person.id, n)),
-    });
-    let title = format!("Family tree of {}", person.name)
-        .replace('&', "&amp;")
-        .replace('<', "&lt;");
-    let page = TREE_TEMPLATE.replace("__TITLE__", &title).replace(
-        "__DATA__",
-        &serde_json::to_string(&data)?.replace("</", "<\\/"),
-    );
+    let ancestors = parents.map(|n| relatives::ancestors(&people, &person.id, n));
+    let descendants = children.map(|n| relatives::descendants(&people, &person.id, n));
+    let page = html::page(&people, &person, ancestors.as_ref(), descendants.as_ref());
     store::write_atomic(output, page.as_bytes())?;
     println!("wrote {}", output.display());
     Ok(())

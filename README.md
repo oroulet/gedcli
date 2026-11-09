@@ -32,7 +32,7 @@ This installs two commands: `gedcli`, and `ged`, a shortcut for `gedcli ui`
     gedcli check [--only KIND] [--all]        # data problems, each with the edit command that fixes it
     gedcli check --fix                        # rename country spellings (Norge, Nrwy. → Norway)
     gedcli compare ~/Downloads/new-export.ged # what a newer export adds, removes or changes
-    gedcli html ola --parents 6 --children 3 -o tree.html   # interactive tree in the browser
+    gedcli html ola --parents 6 --children 3 -o tree.html   # static page: tree diagram + every person, notes included
     gedcli summary [--format json]            # format, counts, submitters, connections, data quality
     gedcli submitters                         # people entered per submitter account
     gedcli submitters "kari lund" [--count]   # the people one submitter entered

@@ -200,8 +200,18 @@ fn check_finds_one_sided_link_and_fixes_country() {
 }
 
 #[test]
-fn html_embeds_tree_data() {
+fn html_is_a_static_page_with_every_person_and_their_notes() {
     let (dir, file) = workspace();
+    gedcli(&file)
+        .args([
+            "edit",
+            "kari",
+            "--set",
+            "note=Première ligne <1950>\nDeuxième ligne",
+            "--yes",
+        ])
+        .assert()
+        .success();
     let out = dir.path().join("tree.html");
     gedcli(&file)
         .args(["html", "ola", "-o"])
@@ -210,8 +220,18 @@ fn html_embeds_tree_data() {
         .success();
     let page = fs::read_to_string(&out).unwrap();
     assert!(page.contains("<title>Family tree of Ola Berg</title>"));
-    assert!(page.contains("\"name\":\"Åse Lund\""));
-    assert!(!page.contains("__DATA__"));
+    assert!(!page.contains("<script"));
+    for id in ["I4", "I3", "I2", "I1"] {
+        assert!(
+            page.contains(&format!("<section id=\"{id}\"")),
+            "missing section {id}"
+        );
+    }
+    assert!(
+        page.contains("Première ligne &lt;1950&gt;<br>\nDeuxième ligne"),
+        "{page}"
+    );
+    assert!(page.contains("<a href=\"#I3\">Kari Lund</a>"));
 }
 
 #[test]
