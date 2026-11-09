@@ -21,13 +21,14 @@ pub enum Field {
     BirthPlace,
     DeathDate,
     DeathPlace,
+    DeathCause,
     BurialDate,
     BurialPlace,
     Occupation,
     Note,
 }
 
-pub const FIELDS: [Field; 11] = [
+pub const FIELDS: [Field; 12] = [
     Field::Given,
     Field::Surname,
     Field::Sex,
@@ -35,6 +36,7 @@ pub const FIELDS: [Field; 11] = [
     Field::BirthPlace,
     Field::DeathDate,
     Field::DeathPlace,
+    Field::DeathCause,
     Field::BurialDate,
     Field::BurialPlace,
     Field::Occupation,
@@ -51,6 +53,7 @@ impl Field {
             Self::BirthPlace => "birth.place",
             Self::DeathDate => "death.date",
             Self::DeathPlace => "death.place",
+            Self::DeathCause => "death.cause",
             Self::BurialDate => "burial.date",
             Self::BurialPlace => "burial.place",
             Self::Occupation => "occupation",
@@ -71,6 +74,7 @@ impl Field {
             Self::BirthPlace => Some(("BIRT", "PLAC")),
             Self::DeathDate => Some(("DEAT", "DATE")),
             Self::DeathPlace => Some(("DEAT", "PLAC")),
+            Self::DeathCause => Some(("DEAT", "CAUS")),
             Self::BurialDate => Some(("BURI", "DATE")),
             Self::BurialPlace => Some(("BURI", "PLAC")),
             _ => None,

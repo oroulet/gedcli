@@ -543,3 +543,88 @@ fn parents_and_children_can_be_shown_together() {
         .assert()
         .failure();
 }
+
+#[test]
+fn fact_adds_dated_facts_without_replacing_or_duplicating() {
+    let (_dir, file) = workspace();
+    let run = |args: &[&str]| stdout(gedcli(&file).arg("fact").args(args).arg("--yes"));
+    run(&[
+        "kari",
+        "--kind",
+        "occupation",
+        "--value",
+        "nurse",
+        "--date",
+        "1975",
+    ]);
+    run(&[
+        "kari",
+        "--kind",
+        "residence",
+        "--date",
+        "1980",
+        "--place",
+        "Bergen",
+    ]);
+    run(&[
+        "kari",
+        "--kind",
+        "residence",
+        "--date",
+        "1990",
+        "--place",
+        "Oslo",
+    ]);
+    let again = run(&[
+        "kari",
+        "--kind",
+        "residence",
+        "--date",
+        "1990",
+        "--place",
+        "Oslo",
+    ]);
+    assert!(
+        again.starts_with("already recorded for Kari Lund"),
+        "{again}"
+    );
+    run(&[
+        "kari",
+        "--kind",
+        "event",
+        "--type",
+        "Service militaire",
+        "--date",
+        "1970",
+    ]);
+    let saved = fs::read_to_string(&file).unwrap();
+    assert!(saved.contains("1 OCCU nurse\r\n2 DATE 1975\r\n"));
+    assert_eq!(saved.matches("1 RESI\r\n").count(), 2);
+    assert!(saved.contains("1 EVEN\r\n2 TYPE Service militaire\r\n2 DATE 1970\r\n"));
+    gedcli(&file)
+        .args(["fact", "kari", "--kind", "occupation", "--yes"])
+        .assert()
+        .failure();
+}
+
+#[test]
+fn death_cause_is_an_edit_field() {
+    let (_dir, file) = workspace();
+    gedcli(&file)
+        .args([
+            "edit",
+            "kari",
+            "--set",
+            "death.date=2001",
+            "--set",
+            "death.cause=cancer",
+            "--yes",
+        ])
+        .assert()
+        .success();
+    let saved = fs::read_to_string(&file).unwrap();
+    assert!(
+        saved.contains("1 DEAT\r\n2 DATE 2001\r\n2 CAUS cancer\r\n"),
+        "{saved}"
+    );
+}

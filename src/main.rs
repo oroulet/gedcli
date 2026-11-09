@@ -4,6 +4,7 @@ mod check;
 mod compare;
 mod count;
 mod edit;
+mod fact;
 mod kinship;
 mod marriage;
 mod migrate;
@@ -113,6 +114,31 @@ enum Command {
     Ui {
         /// Name words or an xref to start from [default: the first person in the file]
         query: Vec<String>,
+    },
+    /// Add a dated fact (occupation, residence, baptism, …) without replacing existing ones
+    #[command(
+        after_help = "Example: gedcli fact \"ola berg\" residence --date 1910 --place \"Grøtavær, Trondenes\""
+    )]
+    Fact {
+        #[command(flatten)]
+        target: Target,
+        #[arg(long, value_enum)]
+        kind: fact::Kind,
+        /// The fact's text: the occupation, education, religion or title
+        #[arg(long)]
+        value: Option<String>,
+        /// For --kind event: what kind of event, e.g. "Service militaire"
+        #[arg(long = "type", value_name = "TYPE")]
+        kind_label: Option<String>,
+        #[arg(long)]
+        date: Option<String>,
+        #[arg(long)]
+        place: Option<String>,
+        #[command(flatten)]
+        source: SourceArg,
+        /// Write without asking for confirmation
+        #[arg(long, short)]
+        yes: bool,
     },
     /// Set the marriage date and place of a couple (creates their family if needed)
     Marriage {
@@ -308,6 +334,25 @@ fn run(cli: Cli) -> Result<()> {
             source.title.as_deref(),
             yes,
         ),
+        Command::Fact {
+            target,
+            kind,
+            value,
+            kind_label,
+            date,
+            place,
+            source,
+            yes,
+        } => {
+            let fact = fact::Fact {
+                kind,
+                value,
+                kind_label,
+                date,
+                place,
+            };
+            add_fact(&mut store, &target, fact, source.title.as_deref(), yes)
+        }
         Command::Marriage {
             first,
             second,
@@ -599,6 +644,46 @@ fn cite(doc: &mut gedcomkit::Document, xref: &str, title: Option<&str>) -> Resul
         let source = source::ensure(doc, title);
         source::cite(doc.record_mut(xref).context("record vanished")?, &source);
     }
+    Ok(())
+}
+
+fn add_fact(
+    store: &mut Store,
+    target: &Target,
+    fact: fact::Fact,
+    source: Option<&str>,
+    yes: bool,
+) -> Result<()> {
+    let interactive = on_terminal();
+    let fact = fact::checked(fact, store.is_v7())?;
+    let (person, mut record) = {
+        let people = People::new(&store.doc);
+        let person = find(&people, target, interactive, false)?;
+        let record = people
+            .record(&person.id)
+            .context("record vanished")?
+            .clone();
+        (person, record)
+    };
+    if !fact::add(&mut record, &fact) {
+        println!("already recorded for {}: {}", person.name, fact.describe());
+        return Ok(());
+    }
+    println!("{person}\n  + {}", fact.describe());
+    if !yes && !confirm(interactive)? {
+        println!("not written");
+        return Ok(());
+    }
+    if let Some(title) = source {
+        source::cite(&mut record, &source::ensure(&mut store.doc, title));
+    }
+    edit::touch(&mut record);
+    *store
+        .doc
+        .record_mut(&person.id)
+        .context("record vanished")? = record;
+    store.save()?;
+    println!("wrote {}", store.path.display());
     Ok(())
 }
 

@@ -78,8 +78,16 @@ fn edits_stay_in_the_form_until_written() {
     let (_dir, mut store) = fixture_store();
     let before = std::fs::read(&store.path).unwrap();
     let mut app = App::new("@I3@".to_owned());
+    let row = |field| {
+        crate::edit::FIELDS
+            .iter()
+            .position(|f| *f == field)
+            .unwrap()
+    };
+    let birth_place = row(crate::edit::Field::BirthPlace);
+    let occupation = row(crate::edit::Field::Occupation);
     press(&mut app, &mut store, KeyCode::Char('e'));
-    for _ in 0..4 {
+    for _ in 0..birth_place {
         press(&mut app, &mut store, KeyCode::Down);
     }
     press(&mut app, &mut store, KeyCode::Enter);
@@ -89,7 +97,7 @@ fn edits_stay_in_the_form_until_written() {
         matches!(app.mode, Mode::Edit(_)),
         "still editing after one field"
     );
-    for _ in 0..5 {
+    for _ in birth_place..occupation {
         press(&mut app, &mut store, KeyCode::Down);
     }
     press(&mut app, &mut store, KeyCode::Enter);

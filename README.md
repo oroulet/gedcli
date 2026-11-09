@@ -37,6 +37,8 @@ real changes. gedcli also keeps the file's BOM and CRLF line endings.
     gedcli add "kari lund" daughter Liv Berg "12 JUN 1980"
     gedcli add per son Nils - 1955 --with "ase lund"   # pick the family when there are several
     gedcli marriage per "ase lund" --date "17 DEC 1942" --place Bergen   # creates the family if needed
+    gedcli fact ola --kind residence --date 1910 --place "Grøtavær, Trondenes"   # dated facts, several per kind
+    gedcli fact ola --kind event --type "Service militaire" --date 1930
     gedcli edit kari --set birth.place=Bergen --source "Letter from Ola, 2026"   # cite where facts came from
     gedcli migrate [--dry-run]                # convert the file in place to GEDCOM 7.0
     gedcli export --to 5.5.1 -o out.ged       # converted copy, e.g. for Geni
@@ -57,7 +59,7 @@ case and accents. An xref (`@I123@`, `I123`) selects one person directly.
 ## Edit fields
 
 `name.given`, `name.surname`, `sex`, `birth.date`, `birth.place`, `death.date`,
-`death.place`, `burial.date`, `burial.place`, `occupation`, `note`.
+`death.place`, `death.cause`, `burial.date`, `burial.place`, `occupation`, `note`.
 
 An empty value removes the field. Dates are checked and written in the
 file version's grammar (`about 12 june 1950` becomes `ABT 12 JUN 1950`). Each
