@@ -284,7 +284,7 @@ fn details(people: &People, center: &str) -> Vec<String> {
 }
 
 fn event_line(event: &card::Event) -> String {
-    let text: Vec<&str> = [&event.value, &event.date, &event.place]
+    let text: Vec<&str> = [&event.value, &event.date, &event.place, &event.cause]
         .into_iter()
         .flatten()
         .map(String::as_str)

@@ -627,6 +627,8 @@ fn death_cause_is_an_edit_field() {
         saved.contains("1 DEAT\r\n2 DATE 2001\r\n2 CAUS cancer\r\n"),
         "{saved}"
     );
+    let out = stdout(gedcli(&file).args(["show", "kari"]));
+    assert!(out.contains("  Death       2001 · cancer\n"), "{out}");
 }
 
 #[test]

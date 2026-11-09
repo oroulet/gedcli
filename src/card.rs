@@ -36,6 +36,8 @@ pub struct Event {
     pub place: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub value: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cause: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -115,6 +117,7 @@ fn event(node: &Node) -> Event {
             .map(|d| GedcomDate::parse(&d).display()),
         place: place(node),
         value: Some(value).filter(|v| !v.trim().is_empty() && v != "Y"),
+        cause: node.value_of("CAUS").filter(|c| !c.trim().is_empty()),
     }
 }
 
@@ -308,7 +311,7 @@ fn render_family(out: &mut String, family: &FamilyCard) {
 }
 
 fn event_text(event: &Event) -> String {
-    [&event.value, &event.date, &event.place]
+    [&event.value, &event.date, &event.place, &event.cause]
         .into_iter()
         .flatten()
         .cloned()
