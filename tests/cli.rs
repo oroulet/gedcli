@@ -520,3 +520,26 @@ fn source_is_created_once_and_cited_on_what_changed() {
         .unwrap();
     assert!(nils.contains("1 SOUR @SG1@"), "{nils}");
 }
+
+#[test]
+fn parents_and_children_can_be_shown_together() {
+    let (_dir, file) = workspace();
+    let out = stdout(gedcli(&file).args([
+        "show",
+        "kari",
+        "--parents",
+        "1",
+        "--children",
+        "1",
+        "--format",
+        "list",
+    ]));
+    assert!(
+        out.contains("1\tmother\tÅse Lund") && out.contains("1\tson\tOla Berg"),
+        "{out}"
+    );
+    gedcli(&file)
+        .args(["show", "kari", "--count"])
+        .assert()
+        .failure();
+}

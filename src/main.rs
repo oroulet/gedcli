@@ -68,10 +68,10 @@ enum Command {
         #[command(flatten)]
         target: Target,
         /// Show descendants, this many generations deep
-        #[arg(long, group = "relatives", value_name = "GENERATIONS", num_args = 0..=1, default_missing_value = DEFAULT_GENERATIONS)]
+        #[arg(long, value_name = "GENERATIONS", num_args = 0..=1, default_missing_value = DEFAULT_GENERATIONS)]
         children: Option<u32>,
         /// Show ancestors, this many generations up
-        #[arg(long, group = "relatives", value_name = "GENERATIONS", num_args = 0..=1, default_missing_value = DEFAULT_GENERATIONS)]
+        #[arg(long, value_name = "GENERATIONS", num_args = 0..=1, default_missing_value = DEFAULT_GENERATIONS)]
         parents: Option<u32>,
         /// Show every match, one after the other, instead of asking
         #[arg(long, conflicts_with = "pick")]
@@ -80,7 +80,7 @@ enum Command {
         #[arg(long)]
         ids: bool,
         /// Count relatives per generation instead of listing them
-        #[arg(long, requires = "relatives")]
+        #[arg(long)]
         count: bool,
         /// Output format [default: tree on a terminal, list otherwise]
         #[arg(long, value_enum)]
@@ -725,6 +725,9 @@ enum Shown {
 }
 
 fn show(store: &Store, target: &Target, wanted: Relatives, format: Option<Format>) -> Result<()> {
+    if wanted.count && wanted.children.is_none() && wanted.parents.is_none() {
+        bail!("--count needs --parents and/or --children");
+    }
     let format = format.unwrap_or(if std::io::stdout().is_terminal() {
         Format::Tree
     } else {
