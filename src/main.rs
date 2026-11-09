@@ -5,12 +5,14 @@ mod compare;
 mod count;
 mod edit;
 mod kinship;
+mod marriage;
 mod migrate;
 mod person;
 mod relatives;
 mod render;
 mod search;
 mod select;
+mod source;
 mod store;
 mod submitters;
 mod summary;
@@ -40,6 +42,13 @@ struct Cli {
     file: Option<PathBuf>,
     #[command(subcommand)]
     command: Command,
+}
+
+#[derive(Args)]
+struct SourceArg {
+    /// Cite this source (by title) on what is changed; the source record is created if missing
+    #[arg(long = "source", value_name = "TITLE")]
+    title: Option<String>,
 }
 
 #[derive(Args)]
@@ -94,6 +103,8 @@ enum Command {
         /// For a child: the other parent, to choose the family when there are several
         #[arg(long = "with", value_name = "PARTNER")]
         with_partner: Option<String>,
+        #[command(flatten)]
+        source: SourceArg,
         /// Write without asking for confirmation
         #[arg(long, short)]
         yes: bool,
@@ -103,6 +114,24 @@ enum Command {
         /// Name words or an xref to start from [default: the first person in the file]
         query: Vec<String>,
     },
+    /// Set the marriage date and place of a couple (creates their family if needed)
+    Marriage {
+        /// First partner: name words in quotes, or an xref
+        first: String,
+        /// Second partner: name words in quotes, or an xref
+        second: String,
+        /// Marriage date, e.g. "17 DEC 1942"
+        #[arg(long)]
+        date: Option<String>,
+        /// Marriage place
+        #[arg(long)]
+        place: Option<String>,
+        #[command(flatten)]
+        source: SourceArg,
+        /// Write without asking for confirmation
+        #[arg(long, short)]
+        yes: bool,
+    },
     /// Edit a person's common fields, interactively or with --set
     #[command(after_help = format!("Fields: {}", edit::field_keys()))]
     Edit {
@@ -111,6 +140,8 @@ enum Command {
         /// Set a field without prompting, e.g. --set birth.date="12 JUN 1950" (empty value removes)
         #[arg(long = "set", value_name = "FIELD=VALUE")]
         assignments: Vec<String>,
+        #[command(flatten)]
+        source: SourceArg,
         /// Write without asking for confirmation
         #[arg(long, short)]
         yes: bool,
@@ -244,6 +275,7 @@ fn run(cli: Cli) -> Result<()> {
             birth,
             death,
             with_partner,
+            source,
             yes,
         } => {
             let person = add::new_person(
@@ -259,6 +291,7 @@ fn run(cli: Cli) -> Result<()> {
                 relation,
                 &person,
                 with_partner.as_deref(),
+                source.title.as_deref(),
                 yes,
             )
         }
@@ -266,8 +299,30 @@ fn run(cli: Cli) -> Result<()> {
         Command::Edit {
             target,
             assignments,
+            source,
             yes,
-        } => edit(&mut store, &target, &assignments, yes),
+        } => edit(
+            &mut store,
+            &target,
+            &assignments,
+            source.title.as_deref(),
+            yes,
+        ),
+        Command::Marriage {
+            first,
+            second,
+            date,
+            place,
+            source,
+            yes,
+        } => set_marriage(
+            &mut store,
+            [&first, &second],
+            date.as_deref(),
+            place.as_deref(),
+            source.title.as_deref(),
+            yes,
+        ),
         Command::Relation { from, to, format } => relation(&store, &from, &to, format),
         Command::Check {
             only,
@@ -502,6 +557,7 @@ fn add_relative(
     relation: add::Relation,
     person: &add::NewPerson,
     with_partner: Option<&str>,
+    source: Option<&str>,
     yes: bool,
 ) -> Result<()> {
     let interactive = on_terminal();
@@ -532,8 +588,65 @@ fn add_relative(
         return Ok(());
     }
     let xref = add::apply(&mut store.doc, &plan, person)?;
+    cite(&mut store.doc, &xref, source)?;
     store.save()?;
     println!("added {xref}, wrote {}", store.path.display());
+    Ok(())
+}
+
+fn cite(doc: &mut gedcomkit::Document, xref: &str, title: Option<&str>) -> Result<()> {
+    if let Some(title) = title {
+        let source = source::ensure(doc, title);
+        source::cite(doc.record_mut(xref).context("record vanished")?, &source);
+    }
+    Ok(())
+}
+
+fn set_marriage(
+    store: &mut Store,
+    partners: [&str; 2],
+    date: Option<&str>,
+    place: Option<&str>,
+    source: Option<&str>,
+    yes: bool,
+) -> Result<()> {
+    if date.is_none() && place.is_none() {
+        bail!("give --date and/or --place");
+    }
+    let interactive = on_terminal();
+    let couple = {
+        let people = People::new(&store.doc);
+        let pick = |query: &str| {
+            let target = Target {
+                query: vec![query.to_owned()],
+                pick: None,
+            };
+            find(&people, &target, interactive, false).with_context(|| format!("for {query:?}"))
+        };
+        marriage::couple(&people, pick(partners[0])?, pick(partners[1])?)
+    };
+    let family = couple.family.as_deref().unwrap_or("a new family");
+    println!(
+        "marriage of {} and {} in {family}",
+        couple.first.name, couple.second.name
+    );
+    if !yes && !confirm(interactive)? {
+        println!("not written");
+        return Ok(());
+    }
+    let change = marriage::apply(&mut store.doc, &couple, date, place)?;
+    cite(&mut store.doc, &change.family, source)?;
+    store.save()?;
+    let shown = |v: &Option<String>| v.clone().unwrap_or_else(|| "—".to_owned());
+    for (label, (before, after)) in ["date", "place"]
+        .iter()
+        .zip(change.before.iter().zip(&change.after))
+    {
+        if before != after {
+            println!("  marriage.{label}  {} → {}", shown(before), shown(after));
+        }
+    }
+    println!("wrote {}", store.path.display());
     Ok(())
 }
 
@@ -735,7 +848,13 @@ fn show_card(people: &People, person: &Brief, format: Format) -> Result<Shown> {
     })
 }
 
-fn edit(store: &mut Store, target: &Target, assignments: &[String], yes: bool) -> Result<()> {
+fn edit(
+    store: &mut Store,
+    target: &Target,
+    assignments: &[String],
+    source: Option<&str>,
+    yes: bool,
+) -> Result<()> {
     let interactive = on_terminal();
     let v7 = store.is_v7();
     if !v7 {
@@ -776,6 +895,9 @@ fn edit(store: &mut Store, target: &Target, assignments: &[String], yes: bool) -
     if !yes && !confirm(interactive)? {
         println!("not written");
         return Ok(());
+    }
+    if let Some(title) = source {
+        source::cite(&mut record, &source::ensure(&mut store.doc, title));
     }
     edit::touch(&mut record);
     *store

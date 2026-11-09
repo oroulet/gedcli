@@ -408,7 +408,7 @@ fn set_note(record: &mut Node, value: Option<&str>) {
     }
 }
 
-fn set_event_detail(record: &mut Node, tag: &str, sub: &str, value: Option<&str>) {
+pub(crate) fn set_event_detail(record: &mut Node, tag: &str, sub: &str, value: Option<&str>) {
     let index = record.children.iter().position(|n| n.tag() == tag);
     let index = match (index, value) {
         (Some(i), _) => i,

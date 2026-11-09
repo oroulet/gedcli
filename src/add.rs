@@ -304,7 +304,11 @@ fn person_record(xref: &str, sex: Option<&str>, person: &NewPerson) -> Node {
     record
 }
 
-fn new_family(doc: &mut Document, partners: &[(&str, Option<&str>)], children: &[&str]) -> String {
+pub(crate) fn new_family(
+    doc: &mut Document,
+    partners: &[(&str, Option<&str>)],
+    children: &[&str],
+) -> String {
     let xref = doc.next_xref("FG");
     let mut family = Node::record(&xref, "FAM");
     edit::touch(&mut family);
@@ -362,7 +366,7 @@ fn after_last(record: &Node, tags: &[&str]) -> Option<usize> {
         .map(|i| i + 1)
 }
 
-fn insert_record(doc: &mut Document, tag: &str, record: Node) {
+pub(crate) fn insert_record(doc: &mut Document, tag: &str, record: Node) {
     let at = doc
         .records
         .iter()

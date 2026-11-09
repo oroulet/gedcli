@@ -36,6 +36,8 @@ real changes. gedcli also keeps the file's BOM and CRLF line endings.
     gedcli submitters --claim                 # link people without a submitter to the exporter
     gedcli add "kari lund" daughter Liv Berg "12 JUN 1980"
     gedcli add per son Nils - 1955 --with "ase lund"   # pick the family when there are several
+    gedcli marriage per "ase lund" --date "17 DEC 1942" --place Bergen   # creates the family if needed
+    gedcli edit kari --set birth.place=Bergen --source "Letter from Ola, 2026"   # cite where facts came from
     gedcli migrate [--dry-run]                # convert the file in place to GEDCOM 7.0
     gedcli export --to 5.5.1 -o out.ged       # converted copy, e.g. for Geni
 

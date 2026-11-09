@@ -432,3 +432,91 @@ fn submitters_claim_links_unlinked_people_to_the_exporter() {
         "everyone already has a submitter\n"
     );
 }
+
+#[test]
+fn marriage_sets_date_and_place_on_the_couples_family() {
+    let (_dir, file) = workspace();
+    let out = stdout(gedcli(&file).args([
+        "marriage",
+        "per",
+        "åse",
+        "--date",
+        "17 dec 1942",
+        "--place",
+        "Bergen",
+        "--yes",
+    ]));
+    assert!(
+        out.contains("marriage of Per Lund and Åse Lund in @F1@"),
+        "{out}"
+    );
+    assert!(out.contains("marriage.date  — → 17 DEC 1942"), "{out}");
+    let saved = fs::read_to_string(&file).unwrap();
+    assert!(
+        saved.contains("1 CHIL @I3@\r\n1 MARR\r\n2 DATE 17 DEC 1942\r\n2 PLAC Bergen\r\n"),
+        "{saved}"
+    );
+}
+
+#[test]
+fn marriage_creates_a_family_for_a_new_couple() {
+    let (_dir, file) = workspace();
+    gedcli(&file)
+        .args(["marriage", "ola", "per", "--date", "2001", "--yes"])
+        .assert()
+        .success();
+    let saved = fs::read_to_string(&file).unwrap();
+    assert!(
+        saved.contains("0 @FG1@ FAM\r\n1 HUSB @I4@\r\n1 WIFE @I2@\r\n1 MARR\r\n2 DATE 2001\r\n"),
+        "{saved}"
+    );
+}
+
+#[test]
+fn source_is_created_once_and_cited_on_what_changed() {
+    let (_dir, file) = workspace();
+    let title = "Letter from Ola, 2026";
+    for _ in 0..2 {
+        gedcli(&file)
+            .args([
+                "edit",
+                "kari",
+                "--set",
+                "birth.place=Bergen",
+                "--source",
+                title,
+                "--yes",
+            ])
+            .assert()
+            .success();
+    }
+    gedcli(&file)
+        .args([
+            "add", "kari", "son", "Nils", "Berg", "1980", "--source", title, "--yes",
+        ])
+        .assert()
+        .success();
+    let saved = fs::read_to_string(&file).unwrap();
+    assert_eq!(
+        saved
+            .matches("0 @SG1@ SOUR\r\n1 TITL Letter from Ola, 2026\r\n")
+            .count(),
+        1
+    );
+    let kari = saved
+        .split("0 @I3@ INDI")
+        .nth(1)
+        .unwrap()
+        .split("\r\n0 ")
+        .next()
+        .unwrap();
+    assert_eq!(kari.matches("1 SOUR @SG1@").count(), 1, "{kari}");
+    let nils = saved
+        .split("0 @IG1@ INDI")
+        .nth(1)
+        .unwrap()
+        .split("\r\n0 ")
+        .next()
+        .unwrap();
+    assert!(nils.contains("1 SOUR @SG1@"), "{nils}");
+}
