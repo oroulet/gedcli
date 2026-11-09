@@ -10,6 +10,9 @@ real changes. gedcli also keeps the file's BOM and CRLF line endings.
     cargo install gedcli          # from crates.io
     cargo install --path .        # from a checkout
 
+This installs two commands: `gedcli`, and `ged`, a shortcut for `gedcli ui`
+(`ged`, `ged kari lund`, `ged -f other.ged`).
+
 ## File
 
 `--file F`, else `$GEDCLI_FILE`, else the only `*.ged` in the current directory.

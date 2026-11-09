@@ -628,3 +628,24 @@ fn death_cause_is_an_edit_field() {
         "{saved}"
     );
 }
+
+#[test]
+fn ged_is_gedcli_ui() {
+    let (_dir, file) = workspace();
+    let out = Command::cargo_bin("ged")
+        .unwrap()
+        .env_remove("GEDCLI_FILE")
+        .arg("--file")
+        .arg(&file)
+        .arg("kari")
+        .assert()
+        .failure()
+        .get_output()
+        .stderr
+        .clone();
+    assert!(
+        String::from_utf8(out)
+            .unwrap()
+            .contains("`gedcli ui` needs a terminal")
+    );
+}
