@@ -200,7 +200,10 @@ const HELP: [(&str, &str); 13] = [
     ),
     ("b / Backspace", "back to the previous person"),
     ("n / Tab", "next partner (changes the children row)"),
-    ("/", "find someone: name or @id@; empty shows recently viewed"),
+    (
+        "/",
+        "find someone: name or @id@; empty shows recently viewed",
+    ),
     ("e", "edit the highlighted person's fields"),
     ("c", "add a child to the highlighted person"),
     ("p", "add a parent to the highlighted person"),

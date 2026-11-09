@@ -95,10 +95,21 @@ pub fn events_of(record: &Node) -> Vec<Event> {
         .collect()
 }
 
+fn event_label(node: &Node) -> String {
+    let typed = matches!(node.tag(), "EVEN" | "FACT");
+    match node
+        .value_of("TYPE")
+        .filter(|t| typed && !t.trim().is_empty())
+    {
+        Some(kind) => kind,
+        None => tags::display_label(node.tag()).to_owned(),
+    }
+}
+
 fn event(node: &Node) -> Event {
     let value = node.logical_value();
     Event {
-        label: tags::display_label(node.tag()).to_owned(),
+        label: event_label(node),
         date: node
             .value_of("DATE")
             .map(|d| GedcomDate::parse(&d).display()),
@@ -306,7 +317,7 @@ fn event_text(event: &Event) -> String {
 }
 
 fn line(out: &mut String, label: &str, value: &str) {
-    let _ = writeln!(out, "  {label:<12}{value}");
+    let _ = writeln!(out, "  {label:<11} {value}");
 }
 
 fn capitalize(word: &str) -> String {

@@ -649,3 +649,25 @@ fn ged_is_gedcli_ui() {
             .contains("`gedcli ui` needs a terminal")
     );
 }
+
+#[test]
+fn events_show_their_type() {
+    let (_dir, file) = workspace();
+    gedcli(&file)
+        .args([
+            "fact",
+            "kari",
+            "--kind",
+            "event",
+            "--type",
+            "Prisonnier de guerre",
+            "--date",
+            "1914",
+            "--yes",
+        ])
+        .assert()
+        .success();
+    let out = stdout(gedcli(&file).args(["show", "kari"]));
+    assert!(out.contains("  Prisonnier de guerre 1914\n"), "{out}");
+    assert!(!out.contains("  Event "), "{out}");
+}
