@@ -1,6 +1,7 @@
 mod app;
 mod family;
 mod forms;
+mod memory;
 mod screen;
 mod view;
 
@@ -25,10 +26,7 @@ pub fn start(store: &mut Store, query: &str) -> Result<()> {
 fn starting_person(store: &Store, query: &str) -> Result<String> {
     let people = People::new(&store.doc);
     if query.trim().is_empty() {
-        return people
-            .individuals()
-            .find_map(|r| r.xref().map(str::to_owned))
-            .context("the file has no people");
+        return default_person(store, &people).context("the file has no people");
     }
     let choice = crate::select::Choice {
         pick: None,
@@ -38,25 +36,56 @@ fn starting_person(store: &Store, query: &str) -> Result<String> {
     Ok(crate::select::choose(crate::search::find(&people, query), &choice)?.id)
 }
 
+/// Where to start without a name: where the UI last closed on this file, else the file's exporter, else the first person.
+fn default_person(store: &Store, people: &People) -> Option<String> {
+    memory::remembered(&store.path)
+        .filter(|xref| people.is_individual(xref))
+        .or_else(|| exporter_person(store, people))
+        .or_else(|| {
+            people
+                .individuals()
+                .find_map(|r| r.xref().map(str::to_owned))
+        })
+}
+
+fn exporter_person(store: &Store, people: &People) -> Option<String> {
+    let exporter = crate::submitters::exporter(&store.doc)?;
+    let name = crate::search::normalize(
+        &crate::submitters::name_of(&store.doc, &exporter).replace('/', " "),
+    );
+    let mut matches = people
+        .individuals()
+        .map(crate::person::brief_of)
+        .filter(|b| {
+            crate::search::normalize(&b.name)
+                .split_whitespace()
+                .eq(name.split_whitespace())
+        });
+    let first = matches.next()?;
+    matches.next().is_none().then_some(first.id)
+}
+
 fn run(store: &mut Store, start: String) -> Result<()> {
     let mut terminal = ratatui::init();
-    let result = event_loop(&mut terminal, store, App::new(start));
+    let mut app = App::new(start);
+    let result = event_loop(&mut terminal, store, &mut app);
     ratatui::restore();
+    let _ = memory::remember(&store.path, &app.center);
     result
 }
 
 fn event_loop(
     terminal: &mut ratatui::DefaultTerminal,
     store: &mut Store,
-    mut app: App,
+    app: &mut App,
 ) -> Result<()> {
     while !app.quit {
         let size = terminal.size()?;
         let people = People::new(&store.doc);
         let screen = app.screen(&people);
         let body = ratatui::layout::Rect::new(0, 0, size.width, size.height.saturating_sub(1));
-        app.visible = family::visible_rows(body, &app, &screen);
-        terminal.draw(|frame| view::draw(frame, &app, &screen))?;
+        app.visible = family::visible_rows(body, app, &screen);
+        terminal.draw(|frame| view::draw(frame, app, &screen))?;
         drop(screen);
         drop(people);
         let Event::Key(key) = event::read()? else {

@@ -463,3 +463,17 @@ fn centre_details_show_occupation_and_notes_but_not_submitter() {
     }
     assert!(!screen_text.contains("Added by"), "{screen_text}");
 }
+
+#[test]
+fn without_a_name_the_ui_starts_at_the_exporter() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let path = dir.path().join("family.ged");
+    let text = std::fs::read_to_string("tests/family.ged").unwrap();
+    let text = text
+        .replacen("1 CHAR UTF-8\r\n", "1 CHAR UTF-8\r\n1 SUBM @S1@\r\n", 1)
+        .replacen("0 TRLR", "0 @S1@ SUBM\r\n1 NAME Kari /Lund/\r\n0 TRLR", 1);
+    std::fs::write(&path, text).unwrap();
+    let store = Store::open(path).unwrap();
+    let people = People::new(&store.doc);
+    assert_eq!(default_person(&store, &people).as_deref(), Some("@I3@"));
+}

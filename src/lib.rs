@@ -112,7 +112,7 @@ enum Command {
     },
     /// Full-screen browser: a person with partner, parents and children; edit and add as you go
     Ui {
-        /// Name words or an xref to start from [default: the first person in the file]
+        /// Name words or an xref to start from [default: where you left off, else yourself]
         query: Vec<String>,
     },
     /// Add a dated fact (occupation, residence, baptism, …) without replacing existing ones

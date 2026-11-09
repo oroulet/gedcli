@@ -105,7 +105,13 @@ Piped output never has colours. For a top-down view of a family, use `gedcli ui`
 
 ## Terminal UI
 
-`gedcli ui [name]` opens a full-screen view centred on one person:
+`gedcli ui [name]` (or `ged [name]`) opens a full-screen view centred on one
+person. Without a name it starts where you left off in that file, else at the
+file's exporter (you, in a Geni export), else at the first person.
+The last person is kept in `$XDG_STATE_HOME/gedcli/last-person`
+(`~/.local/state/gedcli/last-person` by default).
+
+The view:
 
 - Their partner sits beside them, with older siblings to the left and younger
   ones to the right. Parents are above and the children of that partnership
