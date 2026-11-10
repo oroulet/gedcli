@@ -1,13 +1,13 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 
 use gedcomkit::Node;
 use ratatui::layout::Size;
-use ratatui_image::Resize;
 use ratatui_image::picker::{Picker, ProtocolType};
 use ratatui_image::protocol::Protocol;
+use ratatui_image::{FilterType, Resize};
 
 use crate::person::People;
 
@@ -22,6 +22,7 @@ type Key = (PathBuf, (u16, u16));
 pub struct Portraits {
     picker: Option<Picker>,
     cache: HashMap<Key, Option<Protocol>>,
+    pending: HashSet<Key>,
     requests: Option<Sender<Key>>,
     results: Receiver<(Key, Option<Protocol>)>,
 }
@@ -35,6 +36,7 @@ impl Portraits {
         Self {
             picker,
             cache: HashMap::new(),
+            pending: HashSet::new(),
             requests,
             results,
         }
@@ -62,7 +64,10 @@ impl Portraits {
         if let Some(loaded) = self.cache.get(&key) {
             return loaded.is_some();
         }
-        self.cache.insert(key.clone(), None);
+        if self.pending.contains(&key) {
+            return true;
+        }
+        self.pending.insert(key.clone());
         requests.send(key).is_ok()
     }
 
@@ -70,10 +75,20 @@ impl Portraits {
     pub fn receive(&mut self) -> bool {
         let mut arrived = false;
         for (key, protocol) in self.results.try_iter() {
+            self.pending.remove(&key);
             self.cache.insert(key, protocol);
             arrived = true;
         }
         arrived
+    }
+
+    /// Whether the image was decoded and found unusable, or images cannot be shown at all.
+    pub fn request_failed(&self, path: &Path, size: (u16, u16)) -> bool {
+        self.requests.is_none()
+            || self
+                .cache
+                .get(&(path.to_path_buf(), size))
+                .is_some_and(Option::is_none)
     }
 
     pub fn cached(&self, path: &Path, size: (u16, u16)) -> Option<&Protocol> {
@@ -111,24 +126,40 @@ fn load(picker: &Picker, path: &Path, (width, height): (u16, u16)) -> Option<Pro
         .decode()
         .ok()?;
     picker
-        .new_protocol(image, Size::new(width, height), Resize::Fit(None))
+        .new_protocol(
+            image,
+            Size::new(width, height),
+            Resize::Scale(Some(FilterType::Triangle)),
+        )
         .ok()
 }
 
 /// The person's primary photo (Geni's `_PRIM Y`), else their first image, as a file next to the `.ged`.
 pub fn portrait_path(people: &People, ged: &Path, xref: &str) -> Option<PathBuf> {
-    let record = people.record(xref)?;
+    image_paths(people, ged, xref).into_iter().next()
+}
+
+/// Every image file of the person found next to the `.ged`, the primary photo first.
+pub fn image_paths(people: &People, ged: &Path, xref: &str) -> Vec<PathBuf> {
+    let Some(record) = people.record(xref) else {
+        return Vec::new();
+    };
     let links: Vec<&Node> = record.all("OBJE").collect();
     let primary = links
         .iter()
-        .find(|l| l.value_of("_PRIM").as_deref() == Some("Y"));
+        .filter(|l| l.value_of("_PRIM").as_deref() == Some("Y"));
     let dir = ged.parent().unwrap_or(Path::new("."));
-    primary
-        .into_iter()
+    let mut paths = Vec::new();
+    for path in primary
         .chain(links.iter())
         .filter_map(|link| image_file(people, link))
         .map(|file| dir.join(file))
-        .find(|path| path.exists())
+    {
+        if !paths.contains(&path) && path.exists() {
+            paths.push(path);
+        }
+    }
+    paths
 }
 
 fn image_file(people: &People, link: &Node) -> Option<String> {

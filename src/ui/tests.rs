@@ -544,3 +544,17 @@ fn the_wife_stays_on_the_right_whoever_is_centred() {
         assert_eq!(screen.center().id, centre);
     }
 }
+
+#[test]
+fn photo_viewer_steps_through_images_and_closes() {
+    let (_dir, mut store) = fixture_store();
+    let mut app = App::new("@I3@".to_owned());
+    press(&mut app, &mut store, KeyCode::Char('v'));
+    press(&mut app, &mut store, KeyCode::Char('h'));
+    assert!(matches!(&app.mode, Mode::Photo { person, index: -1 } if person == "@I3@"));
+    let opened = press(&mut app, &mut store, KeyCode::Char('o'));
+    assert_eq!(opened, "error: no photo for this person");
+    assert!(matches!(app.mode, Mode::Photo { .. }));
+    press(&mut app, &mut store, KeyCode::Esc);
+    assert!(matches!(app.mode, Mode::Browse));
+}
