@@ -64,7 +64,7 @@ pub fn build(people: &People, record: &Node) -> Card {
         events: events_of(record),
         contacts: contacts(record),
         notes: notes(people, record),
-        media: media(record),
+        media: media(people, record),
         parents: parents(people, &view.xref),
         families: families(people, &view.xref),
         ids: ids(record),
@@ -172,9 +172,15 @@ fn notes(people: &People, record: &Node) -> Vec<String> {
         .collect()
 }
 
-fn media(record: &Node) -> Vec<String> {
+/// The files of the record's media, whether written inline or in a media record it points to.
+fn media(people: &People, record: &Node) -> Vec<String> {
     record
         .all("OBJE")
+        .map(|link| {
+            link.pointer()
+                .and_then(|p| people.record(p))
+                .unwrap_or(link)
+        })
         .flat_map(|obje| obje.all("FILE").map(Node::logical_value))
         .collect()
 }

@@ -693,3 +693,21 @@ fn events_show_their_type() {
     assert!(out.contains("  Prisonnier de guerre 1914\n"), "{out}");
     assert!(!out.contains("  Event "), "{out}");
 }
+
+#[test]
+fn show_lists_media_from_media_records() {
+    let (_dir, file) = workspace();
+    let text = fs::read_to_string(&file).unwrap().replacen(
+        "0 @I3@ INDI\r\n",
+        "0 @I3@ INDI\r\n1 OBJE @O1@\r\n",
+        1,
+    );
+    let text = text.replacen(
+        "0 TRLR",
+        "0 @O1@ OBJE\r\n1 FILE media/kari.jpg\r\n2 FORM image/jpeg\r\n0 TRLR",
+        1,
+    );
+    fs::write(&file, text).unwrap();
+    let out = stdout(gedcli(&file).args(["show", "kari"]));
+    assert!(out.contains("  Media       media/kari.jpg\n"), "{out}");
+}
