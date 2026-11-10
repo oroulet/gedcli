@@ -9,14 +9,15 @@ use ratatui_image::protocol::Protocol;
 
 use crate::person::People;
 
-pub const WIDTH: u16 = 16;
-pub const HEIGHT: u16 = 8;
+/// Image area in character cells: the large one for the centre person, the small one on other cards.
+pub const PORTRAIT: (u16, u16) = (16, 8);
+pub const THUMB: (u16, u16) = (6, 3);
 const IMAGE_EXTENSIONS: [&str; 6] = ["jpg", "jpeg", "png", "gif", "webp", "bmp"];
 
 /// Terminal images for the centre person, loaded once per file.
 pub struct Portraits {
     picker: Option<Picker>,
-    cache: HashMap<PathBuf, Option<Protocol>>,
+    cache: HashMap<(PathBuf, (u16, u16)), Option<Protocol>>,
 }
 
 impl Portraits {
@@ -41,17 +42,23 @@ impl Portraits {
             .map_or_else(|| "none".to_owned(), |p| format!("{:?}", p.protocol_type()))
     }
 
-    /// The image at `path`, sized to fit the portrait area, or None when it cannot be shown.
-    pub fn get(&mut self, path: &Path) -> Option<&Protocol> {
-        let picker = self.picker.as_ref()?;
+    /// Loads the image at `path` for an area of `size` cells, once; returns whether it can be shown.
+    pub fn load(&mut self, path: &Path, size: (u16, u16)) -> bool {
+        let Some(picker) = self.picker.as_ref() else {
+            return false;
+        };
         self.cache
-            .entry(path.to_path_buf())
-            .or_insert_with(|| load(picker, path))
-            .as_ref()
+            .entry((path.to_path_buf(), size))
+            .or_insert_with(|| load(picker, path, size))
+            .is_some()
+    }
+
+    pub fn cached(&self, path: &Path, size: (u16, u16)) -> Option<&Protocol> {
+        self.cache.get(&(path.to_path_buf(), size))?.as_ref()
     }
 }
 
-fn load(picker: &Picker, path: &Path) -> Option<Protocol> {
+fn load(picker: &Picker, path: &Path, (width, height): (u16, u16)) -> Option<Protocol> {
     let image = image::ImageReader::open(path)
         .ok()?
         .with_guessed_format()
@@ -59,7 +66,7 @@ fn load(picker: &Picker, path: &Path) -> Option<Protocol> {
         .decode()
         .ok()?;
     picker
-        .new_protocol(image, Size::new(WIDTH, HEIGHT), Resize::Fit(None))
+        .new_protocol(image, Size::new(width, height), Resize::Fit(None))
         .ok()
 }
 
@@ -129,7 +136,7 @@ mod tests {
         let picker = Picker::halfblocks();
         println!(
             "decoded: {}",
-            found.is_some_and(|p| load(&picker, &p).is_some())
+            found.is_some_and(|p| load(&picker, &p, PORTRAIT).is_some())
         );
     }
 }

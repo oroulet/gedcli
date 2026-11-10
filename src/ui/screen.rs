@@ -29,7 +29,8 @@ pub struct Screen {
     pub partner_index: usize,
     pub center_pos: usize,
     pub partner_pos: Option<usize>,
-    pub has_portrait: bool,
+    /// Upper-cased ids of the people whose photo is shown.
+    pub photos: std::collections::HashSet<String>,
 }
 
 struct CenterRow {
@@ -91,8 +92,21 @@ impl Screen {
             partner_index,
             center_pos: row.center_pos,
             partner_pos: row.partner_pos,
-            has_portrait: false,
+            photos: std::collections::HashSet::new(),
         }
+    }
+
+    /// The image area of a person's card, when their photo is shown.
+    pub fn photo_size(&self, row: usize, index: usize) -> Option<(u16, u16)> {
+        let person = self.at(row, index)?;
+        if !self.photos.contains(&person.id.to_ascii_uppercase()) {
+            return None;
+        }
+        Some(if row == CENTER && index == self.center_pos {
+            super::portrait::PORTRAIT
+        } else {
+            super::portrait::THUMB
+        })
     }
 
     pub fn center(&self) -> &Brief {

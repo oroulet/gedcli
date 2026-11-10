@@ -10,7 +10,6 @@ use ratatui_image::Image;
 use ratatui_image::protocol::Protocol;
 
 use super::app::App;
-use super::portrait;
 use super::screen::{
     CENTER, CHILDREN, GRANDCHILDREN, GRANDPARENTS, GREAT_GRANDCHILDREN, GREAT_GRANDPARENTS, Group,
     PARENTS, ROWS, Screen,
@@ -119,7 +118,11 @@ fn row_plan(area: Rect, app: &App, screen: &Screen, row: usize) -> RowPlan {
     let boxes: Vec<Vec<Line<'static>>> = if row == CENTER {
         center_boxes(area, screen)
     } else {
-        people.iter().map(|p| person_lines(p, MAX_TEXT)).collect()
+        people
+            .iter()
+            .enumerate()
+            .map(|(i, p)| with_photo_room(person_lines(p, MAX_TEXT), screen.photo_size(row, i)))
+            .collect()
     };
     let focus = (app.focus.0 == row).then(|| app.focus_index(screen));
     let widest_gap = if row == CENTER { SIBLING_GAP } else { 1 };
@@ -168,14 +171,15 @@ fn row_plan(area: Rect, app: &App, screen: &Screen, row: usize) -> RowPlan {
 }
 
 /// Leaves an empty column on the left of the centre person's text where the portrait is drawn.
-fn with_portrait_room(mut lines: Vec<Line<'static>>, portrait: bool) -> Vec<Line<'static>> {
-    if !portrait {
+/// Leaves an empty area on the left of a card's text where its photo is drawn.
+fn with_photo_room(mut lines: Vec<Line<'static>>, size: Option<(u16, u16)>) -> Vec<Line<'static>> {
+    let Some((width, height)) = size else {
         return lines;
-    }
-    while lines.len() < usize::from(portrait::HEIGHT) {
+    };
+    while lines.len() < usize::from(height) {
         lines.push(Line::default());
     }
-    let room = " ".repeat(usize::from(portrait::WIDTH) + 1);
+    let room = " ".repeat(usize::from(width) + 1);
     for line in &mut lines {
         line.spans.insert(0, Span::raw(room.clone()));
     }
@@ -224,9 +228,9 @@ fn center_boxes(area: Rect, screen: &Screen) -> Vec<Vec<Line<'static>>> {
         .enumerate()
         .map(|(i, person)| {
             if i == screen.center_pos {
-                with_portrait_room(main_lines(screen, main_width), screen.has_portrait)
+                with_photo_room(main_lines(screen, main_width), screen.photo_size(CENTER, i))
             } else {
-                person_lines(person, MAX_TEXT)
+                with_photo_room(person_lines(person, MAX_TEXT), screen.photo_size(CENTER, i))
             }
         })
         .collect()
@@ -282,14 +286,12 @@ pub fn draw_family(
     area: Rect,
     app: &App,
     screen: &Screen,
-    portrait: Option<&Protocol>,
+    images: &HashMap<String, &Protocol>,
 ) {
     let plan = plan(area, app, screen, app.visible);
     for row in &plan.rows {
         draw_row(frame, area, app, screen, row);
-        if let (CENTER, Some(image)) = (row.row, portrait) {
-            draw_portrait(frame, row, screen, image);
-        }
+        draw_photos(frame, row, screen, images);
     }
     let mut lines = Connectors::default();
     for band in &plan.bands {
@@ -298,17 +300,30 @@ pub fn draw_family(
     lines.render(frame);
 }
 
-fn draw_portrait(frame: &mut Frame, row: &RowPlan, screen: &Screen, image: &Protocol) {
-    let Some(item) = row.items.iter().find(|i| i.index == screen.center_pos) else {
-        return;
-    };
-    let area = Rect {
-        x: item.rect.x + 2,
-        y: item.rect.y + 1,
-        width: portrait::WIDTH.min(item.rect.width.saturating_sub(4)),
-        height: portrait::HEIGHT.min(item.rect.height.saturating_sub(2)),
-    };
-    frame.render_widget(Image::new(image), area);
+fn draw_photos(
+    frame: &mut Frame,
+    row: &RowPlan,
+    screen: &Screen,
+    images: &HashMap<String, &Protocol>,
+) {
+    for item in &row.items {
+        let Some(person) = screen.at(row.row, item.index) else {
+            continue;
+        };
+        let (Some(image), Some((width, height))) = (
+            images.get(&person.id.to_ascii_uppercase()),
+            screen.photo_size(row.row, item.index),
+        ) else {
+            continue;
+        };
+        let area = Rect {
+            x: item.rect.x + 2,
+            y: item.rect.y + 1,
+            width: width.min(item.rect.width.saturating_sub(4)),
+            height: height.min(item.rect.height.saturating_sub(2)),
+        };
+        frame.render_widget(Image::new(image), area);
+    }
 }
 
 fn draw_row(frame: &mut Frame, area: Rect, app: &App, screen: &Screen, row: &RowPlan) {
@@ -546,6 +561,15 @@ pub fn drawn_links(
 #[cfg(test)]
 mod glyph_tests {
     use super::*;
+
+    #[test]
+    fn photo_room_is_left_of_the_text_and_tall_enough() {
+        let lines = vec![Line::from("Kari Lund"), Line::from("b. 1950")];
+        let roomy = with_photo_room(lines.clone(), Some((6, 3)));
+        assert_eq!(roomy.len(), 3);
+        assert_eq!(roomy[0].to_string(), "       Kari Lund");
+        assert_eq!(with_photo_room(lines, None).len(), 2);
+    }
 
     #[test]
     fn crossing_of_two_families_is_a_bridge_but_one_family_joins() {

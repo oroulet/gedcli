@@ -91,15 +91,23 @@ fn event_loop(
         let size = terminal.size()?;
         let people = People::new(&store.doc);
         let mut screen = app.screen(&people);
-        let image = app
-            .show_portraits
-            .then(|| portrait::portrait_path(&people, &store.path, &app.center))
-            .flatten()
-            .and_then(|path| portraits.get(&path));
-        screen.has_portrait = image.is_some();
+        let photos = if app.show_portraits {
+            load_photos(&screen, &people, &store.path, portraits)
+        } else {
+            Vec::new()
+        };
+        screen.photos = photos.iter().map(|(id, _, _)| id.clone()).collect();
+        let images: std::collections::HashMap<String, _> = photos
+            .iter()
+            .filter_map(|(id, path, size)| {
+                portraits
+                    .cached(path, *size)
+                    .map(|image| (id.clone(), image))
+            })
+            .collect();
         let body = ratatui::layout::Rect::new(0, 0, size.width, size.height.saturating_sub(1));
         app.visible = family::visible_rows(body, app, &screen);
-        terminal.draw(|frame| view::draw(frame, app, &screen, image))?;
+        terminal.draw(|frame| view::draw(frame, app, &screen, &images))?;
         drop(screen);
         drop(people);
         let Event::Key(key) = event::read()? else {
@@ -116,6 +124,31 @@ fn event_loop(
         app.status = apply(store, effect).unwrap_or_else(|err| format!("error: {err:#}"));
     }
     Ok(())
+}
+
+/// Loads the photo of everyone on screen (large for the centre person); returns (upper-cased id, file, size).
+fn load_photos(
+    screen: &screen::Screen,
+    people: &People,
+    ged: &std::path::Path,
+    portraits: &mut portrait::Portraits,
+) -> Vec<(String, std::path::PathBuf, (u16, u16))> {
+    let mut photos = Vec::new();
+    for (row, persons) in screen.rows.iter().enumerate() {
+        for (index, person) in persons.iter().enumerate() {
+            let size = if row == screen::CENTER && index == screen.center_pos {
+                portrait::PORTRAIT
+            } else {
+                portrait::THUMB
+            };
+            if let Some(path) = portrait::portrait_path(people, ged, &person.id)
+                && portraits.load(&path, size)
+            {
+                photos.push((person.id.to_ascii_uppercase(), path, size));
+            }
+        }
+    }
+    photos
 }
 
 pub fn apply(store: &mut Store, effect: Effect) -> Result<String> {
@@ -213,7 +246,7 @@ pub fn render_to_text(store: &Store, app: &mut App, width: u16, height: u16) -> 
     let body = ratatui::layout::Rect::new(0, 0, width, height.saturating_sub(1));
     app.visible = family::visible_rows(body, app, &screen);
     terminal
-        .draw(|frame| view::draw(frame, app, &screen, None))
+        .draw(|frame| view::draw(frame, app, &screen, &std::collections::HashMap::new()))
         .expect("draw");
     let buffer = terminal.backend().buffer().clone();
     (0..height)

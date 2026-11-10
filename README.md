@@ -151,7 +151,7 @@ The view:
 | / | find someone by name or id; each result shows how they are related to the centre person, and an empty search lists recently viewed people |
 | e | edit the highlighted person's fields |
 | c / p | add a child / a parent to the highlighted person |
-| i | show or hide the centre person's portrait |
+| i | show or hide the photos |
 | ? | help |
 | q / Ctrl-C | quit, after a Y/n question (Enter = yes); Esc only closes pop-ups |
 
@@ -164,8 +164,8 @@ undone in memory too.
 
 ### Portraits
 
-The centre person's primary photo (from `media/`, see `gedcli media fetch`) is
-drawn in their box when the terminal supports images: kitty graphics (kitty,
+Every card shows the person's primary photo (from `media/`, see `gedcli media
+fetch`): large for the centre person, small on the others. They are drawn when the terminal supports images: kitty graphics (kitty,
 Ghostty, WezTerm…), sixel or iTerm2. Elsewhere it falls back to coarse coloured
 half-blocks, off by default. Inside tmux, enable `set -g allow-passthrough on`.
 At start the UI asks the terminal which protocol it supports; a terminal that

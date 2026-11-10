@@ -20,11 +20,11 @@ pub fn draw(
     frame: &mut Frame,
     app: &App,
     screen: &Screen,
-    portrait: Option<&ratatui_image::protocol::Protocol>,
+    images: &std::collections::HashMap<String, &ratatui_image::protocol::Protocol>,
 ) {
     let area = frame.area();
     let [body, status] = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).areas(area);
-    family::draw_family(frame, body, app, screen, portrait);
+    family::draw_family(frame, body, app, screen, images);
     draw_status(frame, status, app);
     draw_overlay(frame, app);
 }
