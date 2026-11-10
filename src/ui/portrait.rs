@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::{Arc, Mutex};
 
 use gedcomkit::Node;
 use ratatui::layout::Size;
@@ -14,18 +16,27 @@ pub const PORTRAIT: (u16, u16) = (16, 8);
 pub const THUMB: (u16, u16) = (6, 3);
 const IMAGE_EXTENSIONS: [&str; 6] = ["jpg", "jpeg", "png", "gif", "webp", "bmp"];
 
-/// Terminal images for the centre person, loaded once per file.
+type Key = (PathBuf, (u16, u16));
+
+/// Terminal images decoded on background threads, each kept once per file and size.
 pub struct Portraits {
     picker: Option<Picker>,
-    cache: HashMap<(PathBuf, (u16, u16)), Option<Protocol>>,
+    cache: HashMap<Key, Option<Protocol>>,
+    requests: Option<Sender<Key>>,
+    results: Receiver<(Key, Option<Protocol>)>,
 }
 
 impl Portraits {
-    /// Asks the terminal which image protocol it supports; call after entering the alternate screen.
+    /// Asks the terminal which image protocol it supports and starts the decoding threads; call after entering the alternate screen.
     pub fn detect() -> Self {
+        let picker = Picker::from_query_stdio().ok();
+        let (done, results) = mpsc::channel();
+        let requests = picker.clone().map(|picker| start_workers(picker, done));
         Self {
-            picker: Picker::from_query_stdio().ok(),
+            picker,
             cache: HashMap::new(),
+            requests,
+            results,
         }
     }
 
@@ -42,20 +53,54 @@ impl Portraits {
             .map_or_else(|| "none".to_owned(), |p| format!("{:?}", p.protocol_type()))
     }
 
-    /// Loads the image at `path` for an area of `size` cells, once; returns whether it can be shown.
-    pub fn load(&mut self, path: &Path, size: (u16, u16)) -> bool {
-        let Some(picker) = self.picker.as_ref() else {
+    /// Queues the image at `path` for an area of `size` cells; returns false once it is known not to load.
+    pub fn request(&mut self, path: &Path, size: (u16, u16)) -> bool {
+        let Some(requests) = &self.requests else {
             return false;
         };
-        self.cache
-            .entry((path.to_path_buf(), size))
-            .or_insert_with(|| load(picker, path, size))
-            .is_some()
+        let key = (path.to_path_buf(), size);
+        if let Some(loaded) = self.cache.get(&key) {
+            return loaded.is_some();
+        }
+        self.cache.insert(key.clone(), None);
+        requests.send(key).is_ok()
+    }
+
+    /// Stores the images decoded since the last call; returns whether any arrived.
+    pub fn receive(&mut self) -> bool {
+        let mut arrived = false;
+        for (key, protocol) in self.results.try_iter() {
+            self.cache.insert(key, protocol);
+            arrived = true;
+        }
+        arrived
     }
 
     pub fn cached(&self, path: &Path, size: (u16, u16)) -> Option<&Protocol> {
         self.cache.get(&(path.to_path_buf(), size))?.as_ref()
     }
+}
+
+fn start_workers(picker: Picker, done: Sender<(Key, Option<Protocol>)>) -> Sender<Key> {
+    let (requests, queue) = mpsc::channel::<Key>();
+    let queue = Arc::new(Mutex::new(queue));
+    let threads = std::thread::available_parallelism().map_or(2, |n| n.get().min(4));
+    for _ in 0..threads {
+        let (picker, done, queue) = (picker.clone(), done.clone(), Arc::clone(&queue));
+        std::thread::spawn(move || {
+            while let Ok(key) = queue
+                .lock()
+                .map_err(drop)
+                .and_then(|q| q.recv().map_err(drop))
+            {
+                let protocol = load(&picker, &key.0, key.1);
+                if done.send((key, protocol)).is_err() {
+                    break;
+                }
+            }
+        });
+    }
+    requests
 }
 
 fn load(picker: &Picker, path: &Path, (width, height): (u16, u16)) -> Option<Protocol> {

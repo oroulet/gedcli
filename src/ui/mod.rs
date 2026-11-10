@@ -110,7 +110,7 @@ fn event_loop(
         terminal.draw(|frame| view::draw(frame, app, &screen, &images))?;
         drop(screen);
         drop(people);
-        let Event::Key(key) = event::read()? else {
+        let Some(Event::Key(key)) = next_event(portraits)? else {
             continue;
         };
         if key.kind != KeyEventKind::Press {
@@ -126,13 +126,30 @@ fn event_loop(
     Ok(())
 }
 
-/// Loads the photo of everyone on screen (large for the centre person); returns (upper-cased id, file, size).
+/// Waits for a terminal event; returns None when new photos arrived and the screen should be redrawn.
+fn next_event(portraits: &mut portrait::Portraits) -> Result<Option<Event>> {
+    loop {
+        if event::poll(std::time::Duration::from_millis(40))? {
+            return Ok(Some(event::read()?));
+        }
+        if portraits.receive() {
+            return Ok(None);
+        }
+    }
+}
+
+/// Requests the photo of everyone on screen (large for the centre person); returns (upper-cased id, file, size).
 fn load_photos(
     screen: &screen::Screen,
     people: &People,
     ged: &std::path::Path,
     portraits: &mut portrait::Portraits,
 ) -> Vec<(String, std::path::PathBuf, (u16, u16))> {
+    if let Some(centre) = screen.rows[screen::CENTER].get(screen.center_pos)
+        && let Some(path) = portrait::portrait_path(people, ged, &centre.id)
+    {
+        portraits.request(&path, portrait::PORTRAIT);
+    }
     let mut photos = Vec::new();
     for (row, persons) in screen.rows.iter().enumerate() {
         for (index, person) in persons.iter().enumerate() {
@@ -142,7 +159,7 @@ fn load_photos(
                 portrait::THUMB
             };
             if let Some(path) = portrait::portrait_path(people, ged, &person.id)
-                && portraits.load(&path, size)
+                && portraits.request(&path, size)
             {
                 photos.push((person.id.to_ascii_uppercase(), path, size));
             }
