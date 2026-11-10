@@ -8,6 +8,7 @@ mod fact;
 mod html;
 mod kinship;
 mod marriage;
+mod media;
 mod migrate;
 mod person;
 mod relatives;
@@ -44,6 +45,19 @@ struct Cli {
     file: Option<PathBuf>,
     #[command(subcommand)]
     command: Command,
+}
+
+#[derive(Subcommand)]
+enum MediaCommand {
+    /// Download media linked by web address into a folder next to the file and link the local copies
+    Fetch {
+        /// Only list what would be downloaded
+        #[arg(long)]
+        dry_run: bool,
+        /// Folder for the files, relative to the .ged file
+        #[arg(long, default_value = "media")]
+        dir: String,
+    },
 }
 
 #[derive(Args)]
@@ -241,6 +255,11 @@ enum Command {
         #[arg(long, value_enum)]
         format: Option<Format>,
     },
+    /// Photos and documents: fetch web media into a local folder
+    Media {
+        #[command(subcommand)]
+        action: MediaCommand,
+    },
     /// Convert the file in place to GEDCOM 7.0
     Migrate {
         /// Only print what the conversion would do
@@ -405,6 +424,9 @@ fn run(cli: Cli) -> Result<()> {
             format,
             ..
         } => print_submitters(&store, &query, count, format),
+        Command::Media {
+            action: MediaCommand::Fetch { dry_run, dir },
+        } => fetch_media(&mut store, dry_run, &dir),
         Command::Migrate { dry_run } => migrate::migrate(&mut store, dry_run),
         Command::Export { version, output } => migrate::export(&store, &version, &output),
     }
@@ -573,6 +595,39 @@ fn html(
     let page = html::page(&people, &person, ancestors.as_ref(), descendants.as_ref());
     store::write_atomic(output, page.as_bytes())?;
     println!("wrote {}", output.display());
+    Ok(())
+}
+
+fn fetch_media(store: &mut Store, dry_run: bool, dir: &str) -> Result<()> {
+    let remotes = media::remote_media(&store.doc);
+    let files: usize = remotes.iter().map(|r| r.files.len()).sum();
+    println!("{files} web file(s) in {} media link(s)", remotes.len());
+    if dry_run {
+        for remote in &remotes {
+            for file in &remote.files {
+                println!("{}\t{dir}/{}\t{}", remote.owner_name, file.local, file.url);
+            }
+        }
+        return Ok(());
+    }
+    let folder = media::media_dir(&store.path, dir);
+    let outcome = media::fetch(&mut store.doc, &folder, dir, &mut |line| {
+        eprintln!("{line}")
+    })?;
+    if outcome.converted > 0 {
+        store.save()?;
+    }
+    println!(
+        "downloaded {}, already there {}, failed {}; {} link(s) now point to {}",
+        outcome.downloaded,
+        outcome.already_there,
+        outcome.failed.len(),
+        outcome.converted,
+        folder.display()
+    );
+    for (who, why) in &outcome.failed {
+        println!("  failed for {who}: {why}");
+    }
     Ok(())
 }
 

@@ -43,6 +43,7 @@ This installs two commands: `gedcli`, and `ged`, a shortcut for `gedcli ui`
     gedcli fact ola --kind residence --date 1910 --place "Grøtavær, Trondenes"   # dated facts, several per kind
     gedcli fact ola --kind event --type "Service militaire" --date 1930
     gedcli edit kari --set birth.place=Bergen --source "Letter from Ola, 2026"   # cite where facts came from
+    gedcli media fetch [--dry-run]           # download web images into media/ and link the local copies
     gedcli migrate [--dry-run]                # convert the file in place to GEDCOM 7.0
     gedcli export --to 5.5.1 -o out.ged       # converted copy, e.g. for Geni
 
@@ -68,6 +69,21 @@ An empty value removes the field. Dates are checked and written in the
 file version's grammar (`about 12 june 1950` becomes `ABT 12 JUN 1950`). Each
 edit updates the record's `CHAN` timestamp (UTC). Removing the last detail of a
 death or burial keeps `DEAT Y` / `BURI Y`, so the fact itself stays.
+
+## Media
+
+`gedcli media fetch` downloads every photo or document the file links by web
+address (Geni's links expire) into a `media/` folder next to the `.ged`. Each
+embedded link, also those inside source citations, becomes a GEDCOM 7 media
+record pointing at the local copy:
+
+    0 @OG1@ OBJE
+    1 FILE media/I6000000099421087889-img_0023-crop_original.jpg
+    2 FORM image/jpeg
+    2 TITL Michèle Dolino
+
+Files already downloaded are skipped, so it can be run again. A link whose
+download fails is left unchanged.
 
 ## Geni-specific behaviour
 
