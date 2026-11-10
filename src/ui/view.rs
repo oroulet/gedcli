@@ -16,10 +16,15 @@ const MIN_TEXT: u16 = 8;
 const PADDING: u16 = 1;
 const KEYS: &str = " ? help  hjkl move  ⏎ centre  s show  b back  n partner  / find  e edit  c child  p parent  q quit ";
 
-pub fn draw(frame: &mut Frame, app: &App, screen: &Screen) {
+pub fn draw(
+    frame: &mut Frame,
+    app: &App,
+    screen: &Screen,
+    portrait: Option<&ratatui_image::protocol::Protocol>,
+) {
     let area = frame.area();
     let [body, status] = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).areas(area);
-    family::draw_family(frame, body, app, screen);
+    family::draw_family(frame, body, app, screen, portrait);
     draw_status(frame, status, app);
     draw_overlay(frame, app);
 }

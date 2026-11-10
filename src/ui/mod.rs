@@ -2,6 +2,7 @@ mod app;
 mod family;
 mod forms;
 mod memory;
+mod portrait;
 mod screen;
 mod view;
 
@@ -67,8 +68,14 @@ fn exporter_person(store: &Store, people: &People) -> Option<String> {
 
 fn run(store: &mut Store, start: String) -> Result<()> {
     let mut terminal = ratatui::init();
+    let mut portraits = portrait::Portraits::detect();
     let mut app = App::new(start);
-    let result = event_loop(&mut terminal, store, &mut app);
+    app.show_portraits = portraits.has_graphics();
+    app.status = format!(
+        "images: {} (i toggles portraits)",
+        portraits.protocol_name()
+    );
+    let result = event_loop(&mut terminal, store, &mut app, &mut portraits);
     ratatui::restore();
     let _ = memory::remember(&store.path, &app.center);
     result
@@ -78,14 +85,21 @@ fn event_loop(
     terminal: &mut ratatui::DefaultTerminal,
     store: &mut Store,
     app: &mut App,
+    portraits: &mut portrait::Portraits,
 ) -> Result<()> {
     while !app.quit {
         let size = terminal.size()?;
         let people = People::new(&store.doc);
-        let screen = app.screen(&people);
+        let mut screen = app.screen(&people);
+        let image = app
+            .show_portraits
+            .then(|| portrait::portrait_path(&people, &store.path, &app.center))
+            .flatten()
+            .and_then(|path| portraits.get(&path));
+        screen.has_portrait = image.is_some();
         let body = ratatui::layout::Rect::new(0, 0, size.width, size.height.saturating_sub(1));
         app.visible = family::visible_rows(body, app, &screen);
-        terminal.draw(|frame| view::draw(frame, app, &screen))?;
+        terminal.draw(|frame| view::draw(frame, app, &screen, image))?;
         drop(screen);
         drop(people);
         let Event::Key(key) = event::read()? else {
@@ -199,7 +213,7 @@ pub fn render_to_text(store: &Store, app: &mut App, width: u16, height: u16) -> 
     let body = ratatui::layout::Rect::new(0, 0, width, height.saturating_sub(1));
     app.visible = family::visible_rows(body, app, &screen);
     terminal
-        .draw(|frame| view::draw(frame, app, &screen))
+        .draw(|frame| view::draw(frame, app, &screen, None))
         .expect("draw");
     let buffer = terminal.backend().buffer().clone();
     (0..height)

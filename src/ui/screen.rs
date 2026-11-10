@@ -29,6 +29,7 @@ pub struct Screen {
     pub partner_index: usize,
     pub center_pos: usize,
     pub partner_pos: Option<usize>,
+    pub has_portrait: bool,
 }
 
 struct CenterRow {
@@ -90,6 +91,7 @@ impl Screen {
             partner_index,
             center_pos: row.center_pos,
             partner_pos: row.partner_pos,
+            has_portrait: false,
         }
     }
 

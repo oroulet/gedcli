@@ -53,6 +53,7 @@ pub struct App {
     pub quit: bool,
     history: Vec<String>,
     recent: Vec<String>,
+    pub show_portraits: bool,
 }
 
 impl App {
@@ -67,6 +68,7 @@ impl App {
             quit: false,
             history: Vec::new(),
             recent: Vec::new(),
+            show_portraits: false,
         }
     }
 
@@ -113,6 +115,13 @@ impl App {
             KeyCode::Char('s') => self.open_show(screen, people),
             KeyCode::Char('b') | KeyCode::Backspace => self.back(),
             KeyCode::Char('n') | KeyCode::Tab => self.next_partner(screen),
+            KeyCode::Char('i') => {
+                self.show_portraits = !self.show_portraits;
+                self.status = format!(
+                    "portraits {}",
+                    if self.show_portraits { "on" } else { "off" }
+                );
+            }
             KeyCode::Char('/') => {
                 self.mode = Mode::Search(SearchForm::new(people, &self.center, &self.recent))
             }

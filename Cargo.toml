@@ -19,7 +19,9 @@ crossterm = "0.29"
 deunicode = "1.6.2"
 dialoguer = { version = "0.12.0", features = ["fuzzy-select"] }
 gedcomkit = { version = "0.1.19", features = ["serde"] }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "gif", "webp"] }
 ratatui = "0.30"
+ratatui-image = { version = "11.1", default-features = false, features = ["crossterm"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 termtree = "1.0.0"

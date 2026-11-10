@@ -6,7 +6,11 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use unicode_width::UnicodeWidthStr;
 
+use ratatui_image::Image;
+use ratatui_image::protocol::Protocol;
+
 use super::app::App;
+use super::portrait;
 use super::screen::{
     CENTER, CHILDREN, GRANDCHILDREN, GRANDPARENTS, GREAT_GRANDCHILDREN, GREAT_GRANDPARENTS, Group,
     PARENTS, ROWS, Screen,
@@ -163,6 +167,21 @@ fn row_plan(area: Rect, app: &App, screen: &Screen, row: usize) -> RowPlan {
     }
 }
 
+/// Leaves an empty column on the left of the centre person's text where the portrait is drawn.
+fn with_portrait_room(mut lines: Vec<Line<'static>>, portrait: bool) -> Vec<Line<'static>> {
+    if !portrait {
+        return lines;
+    }
+    while lines.len() < usize::from(portrait::HEIGHT) {
+        lines.push(Line::default());
+    }
+    let room = " ".repeat(usize::from(portrait::WIDTH) + 1);
+    for line in &mut lines {
+        line.spans.insert(0, Span::raw(room.clone()));
+    }
+    lines
+}
+
 fn gap_before(row: usize, index: usize, start: usize, screen: &Screen) -> u16 {
     if index == start {
         return 0;
@@ -198,7 +217,7 @@ fn center_boxes(area: Rect, screen: &Screen) -> Vec<Vec<Line<'static>>> {
         .enumerate()
         .map(|(i, person)| {
             if i == screen.center_pos {
-                main_lines(screen, main_width)
+                with_portrait_room(main_lines(screen, main_width), screen.has_portrait)
             } else {
                 person_lines(person, MAX_TEXT)
             }
@@ -251,16 +270,38 @@ fn center(rect: &Rect) -> u16 {
     rect.x + rect.width / 2
 }
 
-pub fn draw_family(frame: &mut Frame, area: Rect, app: &App, screen: &Screen) {
+pub fn draw_family(
+    frame: &mut Frame,
+    area: Rect,
+    app: &App,
+    screen: &Screen,
+    portrait: Option<&Protocol>,
+) {
     let plan = plan(area, app, screen, app.visible);
     for row in &plan.rows {
         draw_row(frame, area, app, screen, row);
+        if let (CENTER, Some(image)) = (row.row, portrait) {
+            draw_portrait(frame, row, screen, image);
+        }
     }
     let mut lines = Connectors::default();
     for band in &plan.bands {
         lines.band(band, &plan.rows[band.upper], &plan.rows[band.lower]);
     }
     lines.render(frame);
+}
+
+fn draw_portrait(frame: &mut Frame, row: &RowPlan, screen: &Screen, image: &Protocol) {
+    let Some(item) = row.items.iter().find(|i| i.index == screen.center_pos) else {
+        return;
+    };
+    let area = Rect {
+        x: item.rect.x + 2,
+        y: item.rect.y + 1,
+        width: portrait::WIDTH.min(item.rect.width.saturating_sub(4)),
+        height: portrait::HEIGHT.min(item.rect.height.saturating_sub(2)),
+    };
+    frame.render_widget(Image::new(image), area);
 }
 
 fn draw_row(frame: &mut Frame, area: Rect, app: &App, screen: &Screen, row: &RowPlan) {
