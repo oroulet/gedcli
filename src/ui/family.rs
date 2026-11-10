@@ -189,16 +189,23 @@ fn gap_before(row: usize, index: usize, start: usize, screen: &Screen) -> u16 {
     if row != CENTER {
         return 1;
     }
-    let couple_edge = index == screen.center_pos
-        || index - 1 == screen.center_pos
-        || Some(index - 1) == screen.partner_pos;
-    if Some(index) == screen.partner_pos {
+    let (first, last) = couple_span(screen);
+    if index == last && first != last {
         MARRIAGE.width() as u16
-    } else if couple_edge {
+    } else if index == first || index == last + 1 {
         SIBLING_GAP
     } else {
         1
     }
+}
+
+/// The positions of the couple (or the lone centre person) in the centre row.
+fn couple_span(screen: &Screen) -> (usize, usize) {
+    let partner = screen.partner_pos.unwrap_or(screen.center_pos);
+    (
+        screen.center_pos.min(partner),
+        screen.center_pos.max(partner),
+    )
 }
 
 fn center_boxes(area: Rect, screen: &Screen) -> Vec<Vec<Line<'static>>> {
@@ -324,14 +331,13 @@ fn draw_row(frame: &mut Frame, area: Rect, app: &App, screen: &Screen, row: &Row
             app.is_focused(row.row, item.index, screen),
         );
     }
+    let (first, last) = couple_span(screen);
     if row.row == CENTER
-        && let Some(partner) = row
-            .items
-            .iter()
-            .find(|i| Some(i.index) == screen.partner_pos)
+        && first != last
+        && let Some(right) = row.items.iter().find(|i| i.index == last)
     {
         let mark = Rect {
-            x: partner.rect.x - MARRIAGE.width() as u16,
+            x: right.rect.x - MARRIAGE.width() as u16,
             y: row.y + 1,
             width: MARRIAGE.width() as u16,
             height: 1,

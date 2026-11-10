@@ -160,26 +160,32 @@ fn center_row(
     let (older, younger): (Vec<_>, Vec<_>) = siblings
         .into_iter()
         .partition(|(_, id)| people.birth_key(id) < own_birth);
-    let mut ids: Vec<(Option<String>, String)> =
-        older.into_iter().map(|(f, id)| (Some(f), id)).collect();
-    let center_pos = ids.len();
-    ids.push((None, center.to_owned()));
-    let mut people_row: Vec<Brief> = Vec::new();
-    let partner_pos = partner.as_ref().map(|_| center_pos + 1);
-    ids.extend(younger.into_iter().map(|(f, id)| (Some(f), id)));
-    for (index, (_, id)) in ids.iter().enumerate() {
-        people_row.push(people.brief(id));
-        if index == center_pos {
-            people_row.extend(partner.clone());
-        }
+    let partner_first = partner.is_some() && wife_and_husband(people, center, partner.as_ref());
+    let couple_len = 1 + usize::from(partner.is_some());
+    let center_pos = older.len() + usize::from(partner_first);
+    let partner_pos = partner
+        .as_ref()
+        .map(|_| older.len() + usize::from(!partner_first));
+    let mut people_row: Vec<Brief> = older.iter().map(|(_, id)| people.brief(id)).collect();
+    let mut couple = vec![people.brief(center)];
+    couple.extend(partner);
+    if partner_first {
+        couple.reverse();
     }
-    let position = |i: usize| {
-        if partner_pos.is_some() && i > center_pos {
-            i + 1
-        } else {
-            i
-        }
-    };
+    people_row.extend(couple);
+    people_row.extend(younger.iter().map(|(_, id)| people.brief(id)));
+    let mut ids: Vec<(Option<String>, usize)> = older
+        .iter()
+        .enumerate()
+        .map(|(i, (f, _))| (Some(f.clone()), i))
+        .collect();
+    ids.push((None, center_pos));
+    ids.extend(
+        younger
+            .iter()
+            .enumerate()
+            .map(|(j, (f, _))| (Some(f.clone()), older.len() + couple_len + j)),
+    );
     let parent_links = families
         .iter()
         .filter_map(|family| {
@@ -192,9 +198,8 @@ fn center_row(
                 .collect();
             let lower: Vec<usize> = ids
                 .iter()
-                .enumerate()
-                .filter(|(_, (f, _))| f.as_deref().is_none_or(|f| f == family))
-                .map(|(i, _)| position(i))
+                .filter(|(f, _)| f.as_deref().is_none_or(|f| f == family))
+                .map(|(_, position)| *position)
                 .collect();
             (!upper.is_empty()).then_some(Group { upper, lower })
         })
@@ -205,6 +210,12 @@ fn center_row(
         partner_pos,
         parent_links,
     }
+}
+
+/// Whether the centre person is a woman whose partner is not: then the husband is drawn on her left.
+fn wife_and_husband(people: &People, center: &str, partner: Option<&Brief>) -> bool {
+    let partner_sex = partner.and_then(|p| p.sex.as_deref());
+    people.sex(center).as_deref() == Some("F") && partner_sex != Some("F")
 }
 
 fn birth_families(people: &People, person: &str) -> Vec<String> {

@@ -529,3 +529,18 @@ fn great_grandchildren_show_when_there_is_room() {
     let short = ratatui::layout::Rect::new(0, 0, 100, 20);
     assert!(!family::visible_rows(short, &app, &screen)[screen::GREAT_GRANDCHILDREN]);
 }
+
+#[test]
+fn the_wife_stays_on_the_right_whoever_is_centred() {
+    let (_dir, store) = fixture_store();
+    let people = People::new(&store.doc);
+    for centre in ["@I1@", "@I2@"] {
+        let screen = App::new(centre.to_owned()).screen(&people);
+        let row: Vec<&str> = screen.rows[screen::CENTER]
+            .iter()
+            .map(|b| b.name.as_str())
+            .collect();
+        assert_eq!(row, ["Per Lund", "Åse Lund"], "centred on {centre}");
+        assert_eq!(screen.center().id, centre);
+    }
+}
