@@ -233,7 +233,7 @@ fn popup(frame: &mut Frame, width: u16, height: u16, title: String) -> Rect {
     inner
 }
 
-const HELP: [(&str, &str); 15] = [
+const HELP: [(&str, &str); 16] = [
     ("←↓↑→ / h j k l", "move between people"),
     ("Enter", "put the highlighted person in the centre"),
     (
@@ -252,6 +252,10 @@ const HELP: [(&str, &str); 15] = [
     (
         "v",
         "photos full screen: h/l previous/next, o opens externally",
+    ),
+    (
+        "o",
+        "open the highlighted person's photo in the image viewer",
     ),
     ("i", "show or hide the photos on the cards"),
     ("?", "this help"),

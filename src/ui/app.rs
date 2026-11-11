@@ -133,6 +133,12 @@ impl App {
                     if self.show_portraits { "on" } else { "off" }
                 );
             }
+            KeyCode::Char('o') => {
+                return Effect::Open {
+                    person: self.focused(screen).id.clone(),
+                    index: 0,
+                };
+            }
             KeyCode::Char('v') => {
                 self.mode = Mode::Photo {
                     person: self.focused(screen).id.clone(),

@@ -567,3 +567,12 @@ fn narrow_screen_with_the_husband_scrolled_away_draws() {
         render_to_text(&store, &mut app, width, 30);
     }
 }
+
+#[test]
+fn o_on_the_tree_opens_the_focused_photo() {
+    let (_dir, mut store) = fixture_store();
+    let mut app = App::new("@I3@".to_owned());
+    let opened = press(&mut app, &mut store, KeyCode::Char('o'));
+    assert_eq!(opened, "error: no photo for this person");
+    assert!(matches!(app.mode, Mode::Browse));
+}
