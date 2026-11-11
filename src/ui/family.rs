@@ -349,10 +349,11 @@ fn draw_row(frame: &mut Frame, area: Rect, app: &App, screen: &Screen, row: &Row
     let (first, last) = couple_span(screen);
     if row.row == CENTER
         && first != last
+        && row.items.iter().any(|i| i.index == first)
         && let Some(right) = row.items.iter().find(|i| i.index == last)
     {
         let mark = Rect {
-            x: right.rect.x - MARRIAGE.width() as u16,
+            x: right.rect.x.saturating_sub(MARRIAGE.width() as u16),
             y: row.y + 1,
             width: MARRIAGE.width() as u16,
             height: 1,

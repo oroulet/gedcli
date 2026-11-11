@@ -558,3 +558,12 @@ fn photo_viewer_steps_through_images_and_closes() {
     press(&mut app, &mut store, KeyCode::Esc);
     assert!(matches!(app.mode, Mode::Browse));
 }
+
+#[test]
+fn narrow_screen_with_the_husband_scrolled_away_draws() {
+    let (_dir, store) = fixture_store();
+    let mut app = App::new("@I1@".to_owned());
+    for width in 14..40 {
+        render_to_text(&store, &mut app, width, 30);
+    }
+}
