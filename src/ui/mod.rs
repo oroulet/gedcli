@@ -156,7 +156,7 @@ fn viewed_photo(
     let count = paths.len();
     let shown = index.rem_euclid(count as isize) as usize;
     let path = paths.swap_remove(shown);
-    let size = (body.width.saturating_sub(2), body.height.saturating_sub(2));
+    let size = portraits.viewer_size((body.width.saturating_sub(2), body.height.saturating_sub(2)));
     portraits.request(&path, size);
     let name = path.file_name().unwrap_or_default().to_string_lossy();
     let title = format!(

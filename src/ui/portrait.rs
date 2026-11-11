@@ -14,6 +14,8 @@ use crate::person::People;
 /// Image area in character cells: the large one for the centre person, the small one on other cards.
 pub const PORTRAIT: (u16, u16) = (16, 8);
 pub const THUMB: (u16, u16) = (6, 3);
+/// Largest full-screen image in pixels; bigger ones flood the terminal (and tmux) with escape codes.
+const VIEWER_PIXELS: (u16, u16) = (1280, 960);
 const IMAGE_EXTENSIONS: [&str; 6] = ["jpg", "jpeg", "png", "gif", "webp", "bmp"];
 
 type Key = (PathBuf, (u16, u16));
@@ -53,6 +55,18 @@ impl Portraits {
         self.picker
             .as_ref()
             .map_or_else(|| "none".to_owned(), |p| format!("{:?}", p.protocol_type()))
+    }
+
+    /// The viewer area in cells for a screen of `cells`, kept within the pixel limit.
+    pub fn viewer_size(&self, cells: (u16, u16)) -> (u16, u16) {
+        let font = self
+            .picker
+            .as_ref()
+            .map_or((10, 20), |p| (p.font_size().width, p.font_size().height));
+        (
+            cells.0.min(VIEWER_PIXELS.0 / font.0.max(1)),
+            cells.1.min(VIEWER_PIXELS.1 / font.1.max(1)),
+        )
     }
 
     /// Queues the image at `path` for an area of `size` cells; returns false once it is known not to load.
