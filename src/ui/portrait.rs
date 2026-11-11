@@ -14,10 +14,6 @@ use crate::person::People;
 /// Image area in character cells: the large one for the centre person, the small one on other cards.
 pub const PORTRAIT: (u16, u16) = (16, 8);
 pub const THUMB: (u16, u16) = (6, 3);
-/// Largest full-screen image in pixels; bigger ones flood the terminal with escape codes.
-const VIEWER_PIXELS: (u16, u16) = (1280, 960);
-/// Ghostty crashes on large images passed through tmux.
-const TMUX_VIEWER_PIXELS: (u16, u16) = (640, 480);
 const IMAGE_EXTENSIONS: [&str; 6] = ["jpg", "jpeg", "png", "gif", "webp", "bmp"];
 
 type Key = (PathBuf, (u16, u16));
@@ -59,23 +55,6 @@ impl Portraits {
             .map_or_else(|| "none".to_owned(), |p| format!("{:?}", p.protocol_type()))
     }
 
-    /// The viewer area in cells for a screen of `cells`, kept within the pixel limit.
-    pub fn viewer_size(&self, cells: (u16, u16)) -> (u16, u16) {
-        let font = self
-            .picker
-            .as_ref()
-            .map_or((10, 20), |p| (p.font_size().width, p.font_size().height));
-        let limit = if std::env::var_os("TMUX").is_some() {
-            TMUX_VIEWER_PIXELS
-        } else {
-            VIEWER_PIXELS
-        };
-        (
-            cells.0.min(limit.0 / font.0.max(1)),
-            cells.1.min(limit.1 / font.1.max(1)),
-        )
-    }
-
     /// Queues the image at `path` for an area of `size` cells; returns false once it is known not to load.
     pub fn request(&mut self, path: &Path, size: (u16, u16)) -> bool {
         let Some(requests) = &self.requests else {
@@ -101,15 +80,6 @@ impl Portraits {
             arrived = true;
         }
         arrived
-    }
-
-    /// Whether the image was decoded and found unusable, or images cannot be shown at all.
-    pub fn request_failed(&self, path: &Path, size: (u16, u16)) -> bool {
-        self.requests.is_none()
-            || self
-                .cache
-                .get(&(path.to_path_buf(), size))
-                .is_some_and(Option::is_none)
     }
 
     pub fn cached(&self, path: &Path, size: (u16, u16)) -> Option<&Protocol> {
@@ -157,30 +127,18 @@ fn load(picker: &Picker, path: &Path, (width, height): (u16, u16)) -> Option<Pro
 
 /// The person's primary photo (Geni's `_PRIM Y`), else their first image, as a file next to the `.ged`.
 pub fn portrait_path(people: &People, ged: &Path, xref: &str) -> Option<PathBuf> {
-    image_paths(people, ged, xref).into_iter().next()
-}
-
-/// Every image file of the person found next to the `.ged`, the primary photo first.
-pub fn image_paths(people: &People, ged: &Path, xref: &str) -> Vec<PathBuf> {
-    let Some(record) = people.record(xref) else {
-        return Vec::new();
-    };
+    let record = people.record(xref)?;
     let links: Vec<&Node> = record.all("OBJE").collect();
     let primary = links
         .iter()
-        .filter(|l| l.value_of("_PRIM").as_deref() == Some("Y"));
+        .find(|l| l.value_of("_PRIM").as_deref() == Some("Y"));
     let dir = ged.parent().unwrap_or(Path::new("."));
-    let mut paths = Vec::new();
-    for path in primary
+    primary
+        .into_iter()
         .chain(links.iter())
         .filter_map(|link| image_file(people, link))
         .map(|file| dir.join(file))
-    {
-        if !paths.contains(&path) && path.exists() {
-            paths.push(path);
-        }
-    }
-    paths
+        .find(|path| path.exists())
 }
 
 fn image_file(people: &People, link: &Node) -> Option<String> {

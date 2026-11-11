@@ -92,22 +92,12 @@ fn event_loop(
         let people = People::new(&store.doc);
         let mut screen = app.screen(&people);
         let body = ratatui::layout::Rect::new(0, 0, size.width, size.height.saturating_sub(1));
-        let shown = viewed_photo(app, &people, &store.path, portraits, body);
-        let photos = if app.show_portraits && shown.is_none() {
+        let photos = if app.show_portraits {
             load_photos(&screen, &people, &store.path, portraits)
         } else {
             Vec::new()
         };
         screen.photos = photos.iter().map(|(id, _, _)| id.clone()).collect();
-        let viewer = shown.map(|(path, size, title)| view::Viewer {
-            image: portraits.cached(&path, size),
-            note: if portraits.request_failed(&path, size) {
-                "this image cannot be shown here; o opens it outside"
-            } else {
-                "loading…"
-            },
-            title,
-        });
         let images: std::collections::HashMap<String, _> = photos
             .iter()
             .filter_map(|(id, path, size)| {
@@ -117,7 +107,7 @@ fn event_loop(
             })
             .collect();
         app.visible = family::visible_rows(body, app, &screen);
-        terminal.draw(|frame| view::draw(frame, app, &screen, &images, viewer.as_ref()))?;
+        terminal.draw(|frame| view::draw(frame, app, &screen, &images))?;
         drop(screen);
         drop(people);
         let Some(Event::Key(key)) = next_event(portraits)? else {
@@ -136,43 +126,12 @@ fn event_loop(
     Ok(())
 }
 
-/// Queues the image the photo viewer shows; returns its file, size and title, or closes the viewer when there is none.
-fn viewed_photo(
-    app: &mut App,
-    people: &People,
-    ged: &std::path::Path,
-    portraits: &mut portrait::Portraits,
-    body: ratatui::layout::Rect,
-) -> Option<(std::path::PathBuf, (u16, u16), String)> {
-    let app::Mode::Photo { person, index } = &app.mode else {
-        return None;
-    };
-    let mut paths = portrait::image_paths(people, ged, person);
-    if paths.is_empty() {
-        app.mode = app::Mode::Browse;
-        app.status = "no photo for this person".to_owned();
-        return None;
-    }
-    let count = paths.len();
-    let shown = index.rem_euclid(count as isize) as usize;
-    let path = paths.swap_remove(shown);
-    let size = portraits.viewer_size((body.width.saturating_sub(2), body.height.saturating_sub(2)));
-    portraits.request(&path, size);
-    let name = path.file_name().unwrap_or_default().to_string_lossy();
-    let title = format!(
-        " {name} — {}/{count} · h/l previous/next · o open outside · any key closes ",
-        shown + 1
-    );
-    Some((path, size, title))
-}
-
-fn open_outside(store: &Store, person: &str, index: isize) -> Result<String> {
+fn open_outside(store: &Store, person: &str) -> Result<String> {
     let people = People::new(&store.doc);
-    let paths = portrait::image_paths(&people, &store.path, person);
-    anyhow::ensure!(!paths.is_empty(), "no photo for this person");
-    let path = &paths[index.rem_euclid(paths.len() as isize) as usize];
+    let path = portrait::portrait_path(&people, &store.path, person)
+        .context("no photo for this person")?;
     std::process::Command::new("xdg-open")
-        .arg(path)
+        .arg(&path)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
@@ -232,7 +191,7 @@ pub fn apply(store: &mut Store, effect: Effect) -> Result<String> {
             changes,
         } => apply_write(store, &person, record, &changes),
         Effect::Add(request) => apply_add(store, &request),
-        Effect::Open { person, index } => open_outside(store, &person, index),
+        Effect::Open { person } => open_outside(store, &person),
     }
 }
 
@@ -319,7 +278,7 @@ pub fn render_to_text(store: &Store, app: &mut App, width: u16, height: u16) -> 
     let body = ratatui::layout::Rect::new(0, 0, width, height.saturating_sub(1));
     app.visible = family::visible_rows(body, app, &screen);
     terminal
-        .draw(|frame| view::draw(frame, app, &screen, &std::collections::HashMap::new(), None))
+        .draw(|frame| view::draw(frame, app, &screen, &std::collections::HashMap::new()))
         .expect("draw");
     let buffer = terminal.backend().buffer().clone();
     (0..height)

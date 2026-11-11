@@ -17,11 +17,6 @@ pub enum Mode {
     Show(ShowForm),
     Edit(EditForm),
     Add(AddForm),
-    /// A person's photos full screen; `index` wraps around their images.
-    Photo {
-        person: String,
-        index: isize,
-    },
     /// Asking "quit?"; keeps the mode to return to on "no".
     ConfirmQuit(Box<Mode>),
 }
@@ -35,10 +30,9 @@ pub enum Effect {
         changes: Vec<crate::edit::Change>,
     },
     Add(AddRequest),
-    /// Open one of the person's images in the desktop viewer.
+    /// Open the person's photo in the desktop image viewer.
     Open {
         person: String,
-        index: isize,
     },
 }
 
@@ -103,7 +97,6 @@ impl App {
             Mode::Search(form) => self.search_key(key, form, people),
             Mode::Edit(form) => self.edit_key(key, form),
             Mode::Add(form) => self.add_key(key, form),
-            Mode::Photo { person, index } => self.photo_key(key, person, index),
             confirm @ Mode::ConfirmQuit(_) => {
                 self.mode = confirm;
                 Effect::None
@@ -136,14 +129,7 @@ impl App {
             KeyCode::Char('o') => {
                 return Effect::Open {
                     person: self.focused(screen).id.clone(),
-                    index: 0,
                 };
-            }
-            KeyCode::Char('v') => {
-                self.mode = Mode::Photo {
-                    person: self.focused(screen).id.clone(),
-                    index: 0,
-                }
             }
             KeyCode::Char('/') => {
                 self.mode = Mode::Search(SearchForm::new(people, &self.center, &self.recent))
@@ -296,23 +282,6 @@ impl App {
             _ => {}
         }
         self.mode = Mode::Show(form);
-        Effect::None
-    }
-
-    fn photo_key(&mut self, key: KeyEvent, person: String, index: isize) -> Effect {
-        let index = match key.code {
-            KeyCode::Char('h') | KeyCode::Left => index - 1,
-            KeyCode::Char('l') | KeyCode::Right | KeyCode::Char(' ') => index + 1,
-            KeyCode::Char('o') => {
-                self.mode = Mode::Photo {
-                    person: person.clone(),
-                    index,
-                };
-                return Effect::Open { person, index };
-            }
-            _ => return Effect::None,
-        };
-        self.mode = Mode::Photo { person, index };
         Effect::None
     }
 

@@ -15,55 +15,19 @@ use crate::person::Brief;
 
 const MIN_TEXT: u16 = 8;
 const PADDING: u16 = 1;
-const KEYS: &str = " ? help  hjkl move  ⏎ centre  s show  b back  n partner  / find  v photo  e edit  c child  p parent  q quit ";
+const KEYS: &str = " ? help  hjkl move  ⏎ centre  s show  b back  n partner  / find  o photo  e edit  c child  p parent  q quit ";
 
 pub fn draw(
     frame: &mut Frame,
     app: &App,
     screen: &Screen,
     images: &std::collections::HashMap<String, &Protocol>,
-    viewer: Option<&Viewer>,
 ) {
     let area = frame.area();
     let [body, status] = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).areas(area);
-    match viewer {
-        Some(viewer) => draw_viewer(frame, body, viewer),
-        None => family::draw_family(frame, body, app, screen, images),
-    }
+    family::draw_family(frame, body, app, screen, images);
     draw_status(frame, status, app);
     draw_overlay(frame, app);
-}
-
-/// One photo shown full screen, or a note while it loads or when it cannot be shown.
-pub struct Viewer<'a> {
-    pub image: Option<&'a Protocol>,
-    pub title: String,
-    pub note: &'static str,
-}
-
-fn draw_viewer(frame: &mut Frame, area: Rect, viewer: &Viewer) {
-    let block = Block::bordered()
-        .border_type(BorderType::Double)
-        .title(viewer.title.clone());
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-    let Some(image) = viewer.image else {
-        let [middle] = Layout::vertical([Constraint::Length(1)])
-            .flex(ratatui::layout::Flex::Center)
-            .areas(inner);
-        frame.render_widget(Paragraph::new(viewer.note).centered(), middle);
-        return;
-    };
-    let size = image.size();
-    let width = size.width.min(inner.width);
-    let height = size.height.min(inner.height);
-    let rect = Rect {
-        x: inner.x + (inner.width - width) / 2,
-        y: inner.y + (inner.height - height) / 2,
-        width,
-        height,
-    };
-    frame.render_widget(ratatui_image::Image::new(image), rect);
 }
 
 pub(super) fn visible_window(
@@ -171,7 +135,7 @@ fn draw_status(frame: &mut Frame, area: Rect, app: &App) {
 
 fn draw_overlay(frame: &mut Frame, app: &App) {
     match &app.mode {
-        Mode::Browse | Mode::Photo { .. } => {}
+        Mode::Browse => {}
         Mode::Help => draw_help(frame),
         Mode::Search(form) => draw_search(frame, form),
         Mode::Show(form) => draw_show(frame, form),
@@ -191,7 +155,7 @@ fn draw_overlay_mode(frame: &mut Frame, mode: &Mode) {
         Mode::Show(form) => draw_show(frame, form),
         Mode::Edit(form) => draw_edit(frame, form),
         Mode::Add(form) => draw_add(frame, form),
-        Mode::Browse | Mode::Photo { .. } | Mode::ConfirmQuit(_) => {}
+        Mode::Browse | Mode::ConfirmQuit(_) => {}
     }
 }
 
@@ -233,7 +197,7 @@ fn popup(frame: &mut Frame, width: u16, height: u16, title: String) -> Rect {
     inner
 }
 
-const HELP: [(&str, &str); 16] = [
+const HELP: [(&str, &str); 15] = [
     ("←↓↑→ / h j k l", "move between people"),
     ("Enter", "put the highlighted person in the centre"),
     (
@@ -249,10 +213,6 @@ const HELP: [(&str, &str); 16] = [
     ("e", "edit the highlighted person's fields"),
     ("c", "add a child to the highlighted person"),
     ("p", "add a parent to the highlighted person"),
-    (
-        "v",
-        "photos full screen: h/l previous/next, o opens externally",
-    ),
     (
         "o",
         "open the highlighted person's photo in the image viewer",
